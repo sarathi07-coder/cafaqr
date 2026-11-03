@@ -1,0 +1,13 @@
+{
+  "name": "restaurant-qr-ordering-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-stack automated restaurant QR code ordering system",
+  "scripts": {
+    "build": "npm --prefix qr-menu-frontend run build",
+    "dev": "concurrently \"npm --prefix qr-menu-backend run dev\" \"npm --prefix qr-menu-frontend run dev\"",
+    "frontend": "npm --prefix qr-menu-frontend run dev",
+    "backend": "npm --prefix qr-menu-backend run dev"
+  }
+}
+
