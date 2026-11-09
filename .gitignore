@@ -33,4 +33,6 @@ coverage/
 # Binaries & local docs
 bin/
 *.pdf
+VERCEL_ENV_KEYS.txt
+backend.env
 
