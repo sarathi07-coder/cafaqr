@@ -7,6 +7,12 @@ const API_BASE = `${BASE_URL}/api`;
 
 export const api = {
   // --- Public / Customer Endpoints ---
+  async getDefaultTable() {
+    const res = await fetch(`${API_BASE}/order/tables/default`);
+    if (!res.ok) throw new Error('Failed to load default table');
+    return res.json();
+  },
+
   async getMenu(restaurantId) {
     const res = await fetch(`${API_BASE}/menu/${restaurantId}`);
     if (!res.ok) throw new Error('Failed to load menu');

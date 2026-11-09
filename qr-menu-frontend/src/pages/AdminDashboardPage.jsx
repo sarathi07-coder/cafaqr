@@ -400,12 +400,16 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     async function init() {
       try {
-        const res = await fetch('/api/order/tables/default');
-        const data = await res.json();
+        const data = await api.getDefaultTable();
         const rId = data.table?.restaurant_id || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
         setRestaurantId(rId);
         await loadAllData(rId);
-      } catch {
+      } catch (err) {
+        console.warn('Could not load default table, using fallback:', err);
+        const fallbackId = 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
+        setRestaurantId(fallbackId);
+        await loadAllData(fallbackId);
+      } finally {
         setIsLoading(false);
       }
     }
@@ -471,6 +475,15 @@ export default function AdminDashboardPage() {
     socket.on('feedback:new', handleNewFeedback);
     socket.on('upi:payment_submitted', handleUpiPaymentSubmitted);
 
+    // Periodic auto-refresh every 5s for reliable real-time updates under serverless
+    const refreshTimer = setInterval(() => {
+      const activeId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
+      if (token) {
+        api.getActiveGroupedTables(activeId, token).then(setGroupedTables).catch(() => {});
+        api.getAdminOrders(activeId, token).then(setOrdersList).catch(() => {});
+      }
+    }, 5000);
+
     return () => {
       socket.off('service:requested', handleServiceRequested);
       socket.off('service:resolved', handleServiceResolved);
@@ -484,6 +497,7 @@ export default function AdminDashboardPage() {
       socket.off('menu:availability_changed', handleMenuRefresh);
       socket.off('feedback:new', handleNewFeedback);
       socket.off('upi:payment_submitted', handleUpiPaymentSubmitted);
+      clearInterval(refreshTimer);
     };
   }, [restaurantId, token]);
 

@@ -83,8 +83,7 @@ export default function CustomerMenuPage() {
         // Fetch default table if none provided in URL or to discover restaurantId
         if (!effectiveTableId || !effectiveRestId) {
           try {
-            const seedRestRes = await fetch('/api/order/tables/default');
-            const data = await seedRestRes.json();
+            const data = await api.getDefaultTable();
             if (data.table) {
               if (!effectiveTableId) effectiveTableId = data.table.id;
               if (!effectiveRestId) effectiveRestId = data.table.restaurant_id;

@@ -72,19 +72,23 @@ export default function KitchenPage() {
   useEffect(() => {
     async function initKDS() {
       try {
-        const res = await fetch('/api/order/tables/default');
-        const data = await res.json();
+        const data = await api.getDefaultTable();
         const rId = data.table?.restaurant_id || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
         setRestaurantId(rId);
         await loadTickets(rId);
-      } catch {
+      } catch (err) {
+        console.warn('Could not load default table, using fallback:', err);
+        const fallbackId = 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
+        setRestaurantId(fallbackId);
+        await loadTickets(fallbackId);
+      } finally {
         setIsLoading(false);
       }
     }
     initKDS();
   }, []);
 
-  // Real-time socket updates for new orders
+  // Real-time socket updates + fast polling fallback (for serverless environments)
   useEffect(() => {
     function handleNewOrder(order) {
       playKitchenChime();
@@ -104,10 +108,11 @@ export default function KitchenPage() {
     socket.on('order:status_updated', handleOrderUpdated);
     socket.on('kitchen:ticket_advanced', handleOrderUpdated);
 
-    // Auto-refresh interval every 15s
+    // Auto-refresh interval every 4 seconds for instant real-time kitchen updates
     const timer = setInterval(() => {
-      if (restaurantId) loadTickets(restaurantId);
-    }, 15000);
+      const targetId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
+      loadTickets(targetId);
+    }, 4000);
 
     return () => {
       socket.off('order:new', handleNewOrder);
