@@ -155,4 +155,27 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS session_token TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS session_label TEXT;
 CREATE INDEX IF NOT EXISTS idx_orders_session ON orders(session_token);
 
+-- UPI Multi-Bank and Passkey Routing
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_id TEXT DEFAULT 'vallipriya1212-1@oksbi';
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_name TEXT DEFAULT 'Royal Spice Bistro';
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_passkey VARCHAR(50) DEFAULT '1234';
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_accounts JSONB DEFAULT '[]'::jsonb;
+
+-- Menu item badges and veg classification
+ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_veg BOOLEAN DEFAULT TRUE;
+ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS original_price NUMERIC(10,2);
+ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS offer_badge TEXT;
+
+-- Order items customization notes
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS special_instructions TEXT;
+
+-- High-performance lookup indexes
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_table_status ON orders(table_id, status);
+CREATE INDEX IF NOT EXISTS idx_order_items_menu_item ON order_items(menu_item_id);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+CREATE INDEX IF NOT EXISTS idx_menu_items_restaurant ON menu_items(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_menu_items_available ON menu_items(available);
+
+
 

@@ -4,6 +4,17 @@ A production-grade, full-stack contactless dining and Kitchen Display System (KD
 
 ---
 
+## 🌐 Live Production Deployments
+
+- 📱 **Customer QR Menu (Table 1)**: [https://cafaqr-h5b1.vercel.app/order?tableNumber=1](https://cafaqr-h5b1.vercel.app/order?tableNumber=1)
+- 👨‍🍳 **Kitchen Display System (KDS)**: [https://cafaqr-h5b1.vercel.app/kitchen](https://cafaqr-h5b1.vercel.app/kitchen)
+- 📊 **Manager & Cashier Portal**: [https://cafaqr-h5b1.vercel.app/admin](https://cafaqr-h5b1.vercel.app/admin)  
+  *(Login: `admin` / Password: `supersecret` or `admin123` | Manager Passkey: `1234`)*
+- ⚡ **Backend API & Health**: [https://cafaqr.vercel.app/health/db](https://cafaqr.vercel.app/health/db)
+- 📖 **Full Submission & Evaluator Guide**: [`SUBMISSION_GUIDE.md`](./SUBMISSION_GUIDE.md)
+
+---
+
 ## 🚀 Key Features
 
 ### 📱 1. Diner Contactless QR Ordering (`/order` or `/?tableNumber=1`)
