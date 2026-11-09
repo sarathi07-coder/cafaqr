@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: cafaqr-backend
+    runtime: node
+    plan: free
+    rootDir: qr-menu-backend
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DB_HOST
+        value: aws-0-eu-west-1.pooler.supabase.com
+      - key: DB_PORT
+        value: "6543"
+      - key: DB_NAME
+        value: postgres
+      - key: DB_USER
+        value: postgres.fxznruqwymoltvrhrsma
+      - key: DB_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        value: admin@example.com
+      - key: ADMIN_PASS
+        value: supersecret
+      - key: UPI_ID
+        value: vallipriya1212-1@oksbi
+      - key: UPI_NAME
+        value: Royal Spice Bistro
