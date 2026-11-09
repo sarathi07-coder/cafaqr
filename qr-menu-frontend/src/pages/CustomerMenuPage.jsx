@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Sparkles, Filter, AlertCircle, RefreshCw, CheckCircle2, Receipt } from 'lucide-react';
 import Navbar from '../components/Navbar';
@@ -192,6 +192,44 @@ export default function CustomerMenuPage() {
       socket.off('session:ended', handleSessionEnded);
     };
   }, [restaurantId, activeOrder, tableId]);
+
+  // Silent background auto-sync so the diner never needs to reload the page
+  const prevActiveOrderRef = useRef(null);
+
+  useEffect(() => {
+    if (!tableId) return;
+
+    // Silent background check every 3.5s
+    const pollInterval = setInterval(async () => {
+      await checkSession(tableId, true);
+    }, 3500);
+
+    return () => clearInterval(pollInterval);
+  }, [tableId]);
+
+  // Automatically detect when order status advances or when order is settled/paid to show feedback modal
+  useEffect(() => {
+    const prev = prevActiveOrderRef.current;
+    if (prev && prev.id) {
+      if (!activeOrder) {
+        // Order transitioned from active to settled!
+        setToastMessage('🎉 Bill settled! Thank you for dining with us.');
+        setTimeout(() => setIsFeedbackModalOpen(true), 800);
+      } else if (activeOrder.status !== prev.status) {
+        if (activeOrder.status === 'PAID') {
+          setToastMessage('🎉 Bill settled! Thank you for dining with us.');
+          setTimeout(() => setIsFeedbackModalOpen(true), 800);
+        } else if (activeOrder.status === 'PREPARING') {
+          setToastMessage('👨‍🍳 Chef is now preparing your dishes!');
+        } else if (activeOrder.status === 'READY') {
+          setToastMessage('🔔 Your food is ready! Table runner is on the way.');
+        } else if (activeOrder.status === 'SERVED') {
+          setToastMessage('🍽️ Food served! Enjoy your meal.');
+        }
+      }
+    }
+    prevActiveOrderRef.current = activeOrder ? { id: activeOrder.id, status: activeOrder.status } : null;
+  }, [activeOrder]);
 
   // Toast auto-dismiss
   useEffect(() => {

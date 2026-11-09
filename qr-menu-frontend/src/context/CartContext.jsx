@@ -34,9 +34,9 @@ export function CartProvider({ children }) {
   };
 
   // Check and initialize active customer session for this table
-  const checkSession = async (tblId) => {
+  const checkSession = async (tblId, isSilent = false) => {
     if (!tblId) return;
-    setIsLoadingSession(true);
+    if (!isSilent) setIsLoadingSession(true);
     try {
       const storedToken = localStorage.getItem(`qr_session_token_${tblId}`);
       // Initialize or resume customer session for this table
@@ -78,21 +78,23 @@ export function CartProvider({ children }) {
         setActiveOrder(null);
       }
 
-      // Restore isolated draft cart & cooking notes for this specific customer session
-      try {
-        const savedCart = localStorage.getItem(`qr_cart_${sToken}`);
-        if (savedCart) {
-          setCartItems(JSON.parse(savedCart));
-        } else {
-          setCartItems({});
-        }
-        const savedNotes = localStorage.getItem(`qr_notes_${sToken}`);
-        if (savedNotes) {
-          setCookingNotes(savedNotes);
-        } else {
-          setCookingNotes('');
-        }
-      } catch (e) {}
+      // Restore isolated draft cart & cooking notes only on initial non-silent load
+      if (!isSilent) {
+        try {
+          const savedCart = localStorage.getItem(`qr_cart_${sToken}`);
+          if (savedCart) {
+            setCartItems(JSON.parse(savedCart));
+          } else {
+            setCartItems({});
+          }
+          const savedNotes = localStorage.getItem(`qr_notes_${sToken}`);
+          if (savedNotes) {
+            setCookingNotes(savedNotes);
+          } else {
+            setCookingNotes('');
+          }
+        } catch (e) {}
+      }
       if (sessionData.table?.restaurant_id) {
         setRestaurantId(sessionData.table.restaurant_id);
       }
@@ -105,7 +107,7 @@ export function CartProvider({ children }) {
       console.warn('Session check warning:', err.message);
       return null;
     } finally {
-      setIsLoadingSession(false);
+      if (!isSilent) setIsLoadingSession(false);
     }
   };
 
