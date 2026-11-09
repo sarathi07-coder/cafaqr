@@ -82,6 +82,16 @@ app.get(['/health', '/api/health'], (req, res) => {
   });
 });
 
+// Diagnostic DB check
+app.get('/health/db', async (req, res) => {
+  try {
+    const result = await db.query('SELECT current_database(), current_user, version()');
+    res.json({ status: 'ok', db: result.rows[0], env: { host: process.env.DB_HOST, port: process.env.DB_PORT, user: process.env.DB_USER, db: process.env.DB_NAME } });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message, code: err.code, stack: err.stack, env: { host: process.env.DB_HOST, port: process.env.DB_PORT, user: process.env.DB_USER, hasPass: !!process.env.DB_PASSWORD } });
+  }
+});
+
 // ── Production: Serve the built React frontend ──────────────────────
 const frontendDist = path.join(__dirname, '..', 'qr-menu-frontend', 'dist');
 
