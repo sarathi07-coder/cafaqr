@@ -1333,7 +1333,10 @@ router.post('/:id/feedback', async (req, res) => {
     rating: Joi.number().integer().min(1).max(5).required(),
     comments: Joi.string().allow('', null).optional(),
     tags: Joi.array().items(Joi.string()).optional(),
-  });
+    orderId: Joi.string().optional().allow(null, ''),
+    tableId: Joi.string().optional().allow(null, ''),
+    restaurantId: Joi.string().optional().allow(null, ''),
+  }).unknown(true);
 
   const { error, value } = schema.validate(req.body);
   if (error) return res.status(400).json({ error: error.details[0].message });
@@ -1342,9 +1345,18 @@ router.post('/:id/feedback', async (req, res) => {
 
   try {
     const orderRes = await db.query('SELECT id, restaurant_id, table_id, customer_id, total FROM orders WHERE id = $1', [orderId]);
-    if (orderRes.rowCount === 0) return res.status(404).json({ error: 'Order not found' });
+    let effectiveOrderId = orderId;
+    let restaurantId = value.restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
+    let tableId = value.tableId || null;
 
-    const order = orderRes.rows[0];
+    if (orderRes.rowCount > 0) {
+      const order = orderRes.rows[0];
+      restaurantId = order.restaurant_id;
+      tableId = order.table_id;
+    } else {
+      effectiveOrderId = null; // Order was settled or deleted; still save review safely without FK error
+    }
+
     let fullComments = (comments || '').trim();
     if (tags && tags.length > 0) {
       const tagPrefix = `[${rating >= 4 ? 'Praises' : 'Notices'}: ${tags.join(', ')}] `;
@@ -1356,7 +1368,7 @@ router.post('/:id/feedback', async (req, res) => {
       `INSERT INTO order_feedback (order_id, restaurant_id, rating, comments)
        VALUES ($1, $2, $3, $4)
        RETURNING id, rating, comments, created_at`,
-      [orderId, order.restaurant_id, rating, fullComments || null]
+      [effectiveOrderId, restaurantId, rating, fullComments || null]
     );
 
     const feedback = feedbackRes.rows[0];
@@ -1365,8 +1377,8 @@ router.post('/:id/feedback', async (req, res) => {
     try {
       const io = getIO();
       io.emit('feedback:new', {
-        orderId,
-        tableId: order.table_id,
+        orderId: effectiveOrderId,
+        tableId,
         rating,
         comments: fullComments,
         tags: tags || [],
@@ -1412,6 +1424,8 @@ router.post('/feedback/submit', async (req, res) => {
       if (oRes.rowCount > 0) {
         effectiveRestaurantId = oRes.rows[0].restaurant_id;
         if (!tableId) tableId = oRes.rows[0].table_id;
+      } else {
+        effectiveOrderId = null; // Stale or invalid orderId - fallback safely to null so FK doesn't fail
       }
     } else if (tableId) {
       const latestOrderRes = await db.query(
