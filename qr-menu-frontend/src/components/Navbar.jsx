@@ -5,6 +5,8 @@ import { Link } from 'react-router-dom';
 export default function Navbar({
   restaurantName = 'Royal Spice Bistro',
   tableNumber,
+  sessionLabel,
+  customerName,
   hasActiveSession = false,
   onViewBill,
   onCallWaiter
@@ -24,7 +26,7 @@ export default function Navbar({
             {tableNumber && (
               <span className="inline-flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                Table #{tableNumber}
+                Table #{tableNumber} {sessionLabel ? `• ${sessionLabel}` : ''}{customerName ? ` (${customerName})` : ''}
               </span>
             )}
           </div>

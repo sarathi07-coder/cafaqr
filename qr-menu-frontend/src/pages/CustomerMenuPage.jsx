@@ -7,6 +7,7 @@ import ItemNotch from '../components/ItemNotch';
 import CartDrawer from '../components/CartDrawer';
 import ServiceCallModal from '../components/ServiceCallModal';
 import FeedbackModal from '../components/FeedbackModal';
+import UpiPaymentModal from '../components/UpiPaymentModal';
 import { useCart } from '../context/CartContext';
 import { api } from '../api';
 import { socket } from '../socket';
@@ -23,6 +24,8 @@ export default function CustomerMenuPage() {
     setTableNumber,
     restaurantId,
     setRestaurantId,
+    sessionToken,
+    sessionLabel,
     customerName,
     checkSession,
     hasActiveSession,
@@ -41,40 +44,80 @@ export default function CustomerMenuPage() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [isUpiModalOpen, setIsUpiModalOpen] = useState(false);
+  const [upiPaymentData, setUpiPaymentData] = useState({ amount: 0, orderId: null });
+  const [lastCompletedOrderId, setLastCompletedOrderId] = useState(() => {
+    return localStorage.getItem('qr_last_order_id') || '';
+  });
+
+  const handleOpenUpiModal = (target) => {
+    setUpiPaymentData({
+      amount: target?.amount || parseFloat(activeOrder?.total || activeOrder?.total_amount || 0),
+      orderId: target?.orderId || activeOrder?.id
+    });
+    setIsUpiModalOpen(true);
+  };
+
+  const handleUpiPaymentSuccess = () => {
+    setToastMessage('🎉 Bill settled via UPI! Thank you for dining with us.');
+    checkSession(tableId);
+    setTimeout(() => setIsFeedbackModalOpen(true), 1200);
+  };
+
+  // Track active order ID to preserve for post-payment review
+  useEffect(() => {
+    if (activeOrder?.id) {
+      setLastCompletedOrderId(activeOrder.id);
+      localStorage.setItem('qr_last_order_id', activeOrder.id);
+    }
+  }, [activeOrder?.id]);
 
   // Initialize table & fetch menu
   useEffect(() => {
     async function init() {
       setIsLoading(true);
       try {
-        // Fallback default restaurant ID if not provided in URL
         let effectiveRestId = searchParams.get('restaurantId') || restaurantId;
         let effectiveTableId = urlTableId;
 
-        // Fetch demo restaurant/table if none in URL
-        if (!effectiveTableId) {
+        // Fetch default table if none provided in URL or to discover restaurantId
+        if (!effectiveTableId || !effectiveRestId) {
           try {
             const seedRestRes = await fetch('/api/order/tables/default');
             const data = await seedRestRes.json();
             if (data.table) {
-              effectiveTableId = data.table.id;
-              effectiveRestId = data.table.restaurant_id;
+              if (!effectiveTableId) effectiveTableId = data.table.id;
+              if (!effectiveRestId) effectiveRestId = data.table.restaurant_id;
+              if (data.table.number && !urlTableNumber) setTableNumber(data.table.number);
             }
-          } catch {
-            // fallback gracefully
+          } catch (e) {
+            console.warn('Fallback table fetch warning:', e);
           }
         }
 
         if (effectiveTableId) {
           setTableId(effectiveTableId);
-          setTableNumber(urlTableNumber);
-          await checkSession(effectiveTableId);
+          if (urlTableNumber) setTableNumber(urlTableNumber);
+          const sessData = await checkSession(effectiveTableId);
+          if (sessData?.table?.restaurant_id) {
+            effectiveRestId = sessData.table.restaurant_id;
+          }
+          if (sessData?.table?.number && !urlTableNumber) {
+            setTableNumber(sessData.table.number);
+          }
+        }
+
+        // Final fallback if restaurantId is still missing
+        if (!effectiveRestId) {
+          effectiveRestId = 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
         }
 
         if (effectiveRestId) {
           setRestaurantId(effectiveRestId);
           const menuData = await api.getMenu(effectiveRestId);
-          const rawItems = menuData.items || menuData;
+          const rawItems = Array.isArray(menuData)
+            ? menuData
+            : (Array.isArray(menuData?.items) ? menuData.items : []);
           setMenuItems(rawItems);
 
           // Extract unique categories
@@ -96,9 +139,19 @@ export default function CustomerMenuPage() {
     function handleMenuUpdate() {
       if (restaurantId) {
         api.getMenu(restaurantId).then((data) => {
-          setMenuItems(data.items || data);
+          const rawItems = Array.isArray(data) ? data : (data?.items || []);
+          setMenuItems(rawItems);
+          const uniqueCats = Array.from(new Set(rawItems.map((it) => it.category).filter(Boolean)));
+          setCategories(uniqueCats);
         });
       }
+    }
+
+    function handleAvailabilityChanged(updated) {
+      if (!updated?.id) return;
+      setMenuItems((prev) =>
+        prev.map((it) => (it.id === updated.id ? { ...it, available: updated.available, is_available: updated.available } : it))
+      );
     }
 
     function handleOrderStatusUpdate(data) {
@@ -123,6 +176,7 @@ export default function CustomerMenuPage() {
     }
 
     socket.on('menu:updated', handleMenuUpdate);
+    socket.on('menu:availability_changed', handleAvailabilityChanged);
     socket.on('order:status_updated', handleOrderStatusUpdate);
     socket.on('kitchen:ticket_advanced', handleOrderStatusUpdate);
     socket.on('order:items_added', () => checkSession(tableId));
@@ -131,6 +185,7 @@ export default function CustomerMenuPage() {
 
     return () => {
       socket.off('menu:updated', handleMenuUpdate);
+      socket.off('menu:availability_changed', handleAvailabilityChanged);
       socket.off('order:status_updated', handleOrderStatusUpdate);
       socket.off('kitchen:ticket_advanced', handleOrderStatusUpdate);
       socket.off('order:items_added');
@@ -167,6 +222,47 @@ export default function CustomerMenuPage() {
     return matchesCategory && matchesSearch && matchesDiet;
   });
 
+  // Calculate Veg vs Non-Veg metrics across all available dishes and filtered list
+  const dietCounts = React.useMemo(() => {
+    let allVeg = 0;
+    let allNonVeg = 0;
+    menuItems.forEach((it) => {
+      const isVeg = it.is_veg !== undefined
+        ? Boolean(it.is_veg)
+        : !(it.name?.toLowerCase().includes('chicken') ||
+            it.name?.toLowerCase().includes('mutton') ||
+            it.name?.toLowerCase().includes('fish') ||
+            it.name?.toLowerCase().includes('meat') ||
+            it.name?.toLowerCase().includes('egg') ||
+            it.name?.toLowerCase().includes('prawn'));
+      if (isVeg) allVeg++;
+      else allNonVeg++;
+    });
+
+    let filteredVeg = 0;
+    let filteredNonVeg = 0;
+    filteredItems.forEach((it) => {
+      const isVeg = it.is_veg !== undefined
+        ? Boolean(it.is_veg)
+        : !(it.name?.toLowerCase().includes('chicken') ||
+            it.name?.toLowerCase().includes('mutton') ||
+            it.name?.toLowerCase().includes('fish') ||
+            it.name?.toLowerCase().includes('meat') ||
+            it.name?.toLowerCase().includes('egg') ||
+            it.name?.toLowerCase().includes('prawn'));
+      if (isVeg) filteredVeg++;
+      else filteredNonVeg++;
+    });
+
+    return {
+      allTotal: menuItems.length,
+      allVeg,
+      allNonVeg,
+      filteredVeg,
+      filteredNonVeg
+    };
+  }, [menuItems, filteredItems]);
+
   return (
     <div className="min-h-screen bg-stone-50 pb-28 text-stone-900">
       
@@ -184,6 +280,8 @@ export default function CustomerMenuPage() {
       <Navbar
         restaurantName="Royal Spice Bistro"
         tableNumber={tableNumber}
+        sessionLabel={sessionLabel}
+        customerName={customerName}
         hasActiveSession={hasActiveSession}
         onViewBill={() => setIsCartOpen(true)}
         onCallWaiter={() => setIsServiceModalOpen(true)}
@@ -198,7 +296,7 @@ export default function CustomerMenuPage() {
               <span>Contactless Dining</span>
             </div>
             <h2 className="font-serif font-black text-2xl md:text-3xl text-stone-950 tracking-tight">
-              Order Fresh to Table #{tableNumber}
+              Order Fresh to Table #{tableNumber || '1'}
             </h2>
             <p className="text-xs md:text-sm text-stone-600 mt-1 max-w-xl">
               Browse our seasonal chef creations, customize your taste preferences, and order straight from your mobile screen.
@@ -206,16 +304,21 @@ export default function CustomerMenuPage() {
           </div>
 
           {/* Quick Dietary Filters */}
-          <div className="inline-flex p-1 bg-stone-200/80 rounded-2xl self-start md:self-auto shadow-2xs">
+          <div className="inline-flex p-1 bg-stone-200/80 rounded-2xl self-start md:self-auto shadow-2xs gap-1">
             <button
               onClick={() => setDietaryFilter('ALL')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
                 dietaryFilter === 'ALL'
                   ? 'bg-white text-stone-900 shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              All
+              <span>All</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                dietaryFilter === 'ALL' ? 'bg-stone-100 text-stone-800' : 'bg-stone-300/60 text-stone-600'
+              }`}>
+                {dietCounts.allTotal}
+              </span>
             </button>
             <button
               onClick={() => setDietaryFilter('VEG')}
@@ -225,8 +328,15 @@ export default function CustomerMenuPage() {
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-300"></span>
-              Veg
+              <div className="w-2.5 h-2.5 border border-current flex items-center justify-center rounded-2xs shrink-0">
+                <div className="w-1 h-1 rounded-full bg-current"></div>
+              </div>
+              <span>Veg</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                dietaryFilter === 'VEG' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'
+              }`}>
+                {dietCounts.allVeg}
+              </span>
             </button>
             <button
               onClick={() => setDietaryFilter('NON_VEG')}
@@ -236,8 +346,15 @@ export default function CustomerMenuPage() {
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-rose-300"></span>
-              Non-Veg
+              <div className="w-2.5 h-2.5 border border-current flex items-center justify-center rounded-2xs shrink-0">
+                <div className="w-1 h-1 rounded-full bg-current"></div>
+              </div>
+              <span>Non-Veg</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                dietaryFilter === 'NON_VEG' ? 'bg-rose-700 text-white' : 'bg-rose-100 text-rose-800'
+              }`}>
+                {dietCounts.allNonVeg}
+              </span>
             </button>
           </div>
         </div>
@@ -260,7 +377,7 @@ export default function CustomerMenuPage() {
                       Welcome, {customerName || activeOrder?.customer_name || 'Diner'}!
                     </span>
                     <span className="bg-emerald-200/90 text-emerald-950 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full">
-                      Table #{tableNumber} Active Tab
+                      Table #{tableNumber || '1'} &bull; {sessionLabel || 'Customer 1'} Active Tab
                     </span>
                   </div>
                   <p className="text-xs text-emerald-800 mt-0.5">
@@ -402,10 +519,30 @@ export default function CustomerMenuPage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4">
-            {filteredItems.map((item) => (
-              <MenuItemCard key={item.id} item={item} />
-            ))}
+          <div className="space-y-3">
+            {/* Dietary Status Pill */}
+            <div className="flex items-center justify-between text-xs text-stone-500 px-1">
+              <span className="font-semibold text-stone-700">
+                {activeCategory === 'ALL' ? 'All Categories' : activeCategory} ({filteredItems.length} items)
+              </span>
+              <div className="flex items-center gap-2 text-[11px] font-bold">
+                <span className="text-emerald-700 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                  {dietCounts.filteredVeg} Veg
+                </span>
+                <span className="text-stone-300">&bull;</span>
+                <span className="text-rose-700 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                  {dietCounts.filteredNonVeg} Non-Veg
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4">
+              {filteredItems.map((item) => (
+                <MenuItemCard key={item.id} item={item} />
+              ))}
+            </div>
           </div>
         )}
       </main>
@@ -414,6 +551,7 @@ export default function CustomerMenuPage() {
       <ItemNotch
         onOpenCart={() => setIsCartOpen(true)}
         onOpenActiveBill={() => setIsCartOpen(true)}
+        onOpenUpiModal={handleOpenUpiModal}
       />
 
       {/* Cart & Ordering Drawer */}
@@ -421,14 +559,33 @@ export default function CustomerMenuPage() {
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         onOrderSuccess={(msg) => setToastMessage(msg)}
+        onOpenUpiModal={handleOpenUpiModal}
+      />
+
+      {/* Dynamic UPI Payment Modal */}
+      <UpiPaymentModal
+        isOpen={isUpiModalOpen}
+        onClose={() => setIsUpiModalOpen(false)}
+        amount={upiPaymentData.amount || parseFloat(activeOrder?.total || activeOrder?.total_amount || 0)}
+        tableId={tableId || ''}
+        tableNumber={tableNumber || '1'}
+        orderId={upiPaymentData.orderId || activeOrder?.id}
+        sessionToken={sessionToken || ''}
+        customerName={customerName || ''}
+        upiId="vallipriya1212-1@oksbi"
+        upiName="Royal Spice Bistro"
+        onPaymentSuccess={handleUpiPaymentSuccess}
       />
 
       {/* Service Request / Call Waiter Modal */}
       <ServiceCallModal
         isOpen={isServiceModalOpen}
         onClose={() => setIsServiceModalOpen(false)}
-        tableId={tableId}
-        tableNumber={tableNumber}
+        tableId={tableId || ''}
+        tableNumber={tableNumber || '1'}
+        sessionToken={sessionToken || ''}
+        sessionLabel={sessionLabel || 'Customer 1'}
+        customerName={customerName || ''}
         onCallSuccess={(msg) => setToastMessage(msg)}
       />
 
@@ -436,7 +593,9 @@ export default function CustomerMenuPage() {
       <FeedbackModal
         isOpen={isFeedbackModalOpen}
         onClose={() => setIsFeedbackModalOpen(false)}
-        orderId={activeOrder?.id}
+        orderId={lastCompletedOrderId || activeOrder?.id}
+        tableId={tableId}
+        restaurantId={restaurantId}
         onSubmitSuccess={(msg) => setToastMessage(msg)}
       />
     </div>

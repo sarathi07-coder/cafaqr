@@ -7,7 +7,19 @@ const db = require('../db');
 // Returns QR codes for ALL tables in a restaurant for batch printing table stands/stickers
 router.get('/restaurant/:restaurantId/bulk', async (req, res) => {
   const { restaurantId } = req.params;
-  const clientBaseUrl = process.env.CLIENT_URL || process.env.BASE_URL || 'http://localhost:3000';
+  const rawProto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+  const proto = rawProto.split(',')[0].trim();
+  const rawHost = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
+  const host = rawHost.split(',')[0].trim();
+  let clientBaseUrl = process.env.CLIENT_URL;
+  if (!clientBaseUrl) {
+    if (host.includes('.') && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+      clientBaseUrl = `${proto}://${host}`;
+    } else {
+      const hostname = host.split(':')[0];
+      clientBaseUrl = `http://${hostname}:5173`;
+    }
+  }
 
   try {
     const restRes = await db.query('SELECT id, name FROM restaurants WHERE id = $1', [restaurantId]);
@@ -57,7 +69,19 @@ router.get('/:tableId', async (req, res) => {
     }
 
     const table = tableRes.rows[0];
-    const clientBaseUrl = process.env.CLIENT_URL || process.env.BASE_URL || 'http://localhost:3000';
+    const rawProto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+    const proto = rawProto.split(',')[0].trim();
+    const rawHost = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
+    const host = rawHost.split(',')[0].trim();
+    let clientBaseUrl = process.env.CLIENT_URL;
+    if (!clientBaseUrl) {
+      if (host.includes('.') && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+        clientBaseUrl = `${proto}://${host}`;
+      } else {
+        const hostname = host.split(':')[0];
+        clientBaseUrl = `http://${hostname}:5173`;
+      }
+    }
     const orderUrl = `${clientBaseUrl}/order?tableId=${table.id}&tableNumber=${table.number}`;
     const qrWidth = Math.min(Math.max(parseInt(size, 10) || 400, 150), 2000);
 

@@ -30,3 +30,7 @@ Thumbs.db
 scratch/
 coverage/
 
+# Binaries & local docs
+bin/
+*.pdf
+

@@ -30,6 +30,58 @@ router.post('/login', async (req, res) => {
   res.json({ token });
 });
 
+// Setup Multer for food photo file uploads directly from phone / computer
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const uploadStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, '../public/uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, `dish_${uniqueSuffix}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage: uploadStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max for high-res mobile food photos
+  fileFilter: function (req, file, cb) {
+    const filetypes = /jpeg|jpg|png|webp|gif/;
+    const mimetype = filetypes.test(file.mimetype);
+    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    if (mimetype || extname) {
+      return cb(null, true);
+    }
+    cb(new Error('Only image files (JPEG, JPG, PNG, WEBP, GIF) are allowed'));
+  }
+});
+
+// POST /api/admin/upload-image – direct file upload (publicly accessible for admin panel)
+router.post('/upload-image', (req, res) => {
+  upload.single('image')(req, res, function (err) {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Image upload failed' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file uploaded' });
+    }
+    const relativeUrl = `/uploads/${req.file.filename}`;
+    res.json({
+      url: relativeUrl,
+      filename: req.file.filename,
+      size: req.file.size
+    });
+  });
+});
+
 // Protect all following routes
 router.use(verifyToken);
 
@@ -82,6 +134,110 @@ router.put('/restaurant/:id', async (req, res) => {
   const result = await db.query(query, values);
   if (result.rowCount === 0) return res.status(404).json({ error: 'Restaurant not found' });
   res.json(result.rows[0]);
+});
+
+// GET /api/admin/tables/active-grouped
+// Group all active/unpaid orders by table with individual customer sections & combined totals
+router.get('/tables/active-grouped', async (req, res) => {
+  const { restaurantId } = req.query;
+
+  try {
+    let query = `
+      SELECT o.id AS order_id, o.restaurant_id, o.status, o.subtotal, o.tax_amount, o.total, o.notes, o.created_at,
+             o.session_token, o.session_label,
+             t.id AS table_id, t.number AS table_number,
+             c.name AS customer_name, c.phone AS customer_phone,
+             COALESCE(
+               json_agg(
+                 json_build_object(
+                   'id', oi.id,
+                   'quantity', oi.quantity,
+                   'price', oi.price_at_order,
+                   'item_name', mi.name,
+                   'name', mi.name,
+                   'category', mi.category,
+                   'status', COALESCE(oi.status, 'PENDING')
+                 )
+               ) FILTER (WHERE oi.id IS NOT NULL), '[]'
+             ) AS items
+      FROM orders o
+      JOIN tables t ON o.table_id = t.id
+      LEFT JOIN customers c ON o.customer_id = c.id
+      JOIN order_items oi ON o.id = oi.order_id
+      JOIN menu_items mi ON oi.menu_item_id = mi.id
+      WHERE o.status NOT IN ('PAID', 'CANCELLED')
+    `;
+    const params = [];
+    if (restaurantId) {
+      params.push(restaurantId);
+      query += ` AND o.restaurant_id = $${params.length}`;
+    }
+
+    query += ` GROUP BY o.id, t.id, t.number, c.name, c.phone, o.session_token, o.session_label ORDER BY t.number ASC, o.created_at ASC`;
+
+    const result = await db.query(query, params);
+
+    // Group rows by table_id
+    const tableMap = new Map();
+
+    for (const row of result.rows) {
+      const tId = row.table_id;
+      if (!tableMap.has(tId)) {
+        tableMap.set(tId, {
+          tableId: tId,
+          tableNumber: row.table_number,
+          restaurantId: row.restaurant_id,
+          combinedBill: 0,
+          combinedSubtotal: 0,
+          combinedTax: 0,
+          sections: []
+        });
+      }
+
+      const tableGroup = tableMap.get(tId);
+      const subtotal = parseFloat(row.subtotal || 0);
+      const taxAmount = parseFloat(row.tax_amount || 0);
+      const total = parseFloat(row.total || 0);
+
+      tableGroup.combinedSubtotal += subtotal;
+      tableGroup.combinedTax += taxAmount;
+      tableGroup.combinedBill += total;
+
+      const sectionIndex = tableGroup.sections.length;
+      const sectionLetter = String.fromCharCode(65 + (sectionIndex % 26)); // A, B, C, ...
+
+      tableGroup.sections.push({
+        sectionLetter,
+        sectionLabel: `Section ${sectionLetter} – ${row.session_label || `Customer ${sectionIndex + 1}`}`,
+        customerIdentifier: row.session_label || `Customer ${sectionIndex + 1}`,
+        customerName: row.customer_name || 'Guest',
+        customerPhone: row.customer_phone || '',
+        sessionToken: row.session_token,
+        orderId: row.order_id,
+        status: row.status,
+        subtotal,
+        taxAmount,
+        total,
+        notes: row.notes,
+        createdAt: row.created_at,
+        items: row.items
+      });
+    }
+
+    // Convert map to array and add activeCustomersCount
+    const groupedList = Array.from(tableMap.values()).map(t => ({
+      ...t,
+      activeCustomersCount: t.sections.length,
+      combinedBill: Math.round(t.combinedBill * 100) / 100,
+      combinedSubtotal: Math.round(t.combinedSubtotal * 100) / 100,
+      combinedTax: Math.round(t.combinedTax * 100) / 100
+    }));
+
+    res.json(groupedList);
+  } catch (err) {
+    console.error('Fetch active grouped tables error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // ----- Table CRUD -----
@@ -142,85 +298,153 @@ router.post('/menu', async (req, res) => {
   const schema = Joi.object({
     restaurantId: Joi.string().uuid().required(),
     name: Joi.string().required(),
-    description: Joi.string().optional(),
+    description: Joi.string().optional().allow(''),
     category: Joi.string().default('Main Course'),
     price: Joi.number().precision(2).required(),
-    photoUrl: Joi.string().uri().optional(),
+    originalPrice: Joi.number().precision(2).optional().allow(null),
+    offerBadge: Joi.string().optional().allow('', null),
+    photoUrl: Joi.string().optional().allow('', null),
     available: Joi.boolean().default(true),
+    isVeg: Joi.boolean().default(true),
   });
   const { error, value } = schema.validate(req.body);
   if (error) return res.status(400).json({ error: error.details[0].message });
-  const { restaurantId, name, description, category, price, photoUrl, available } = value;
-  const result = await db.query(
-    `INSERT INTO menu_items (restaurant_id, name, description, category, price, photo_url, available)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [restaurantId, name, description, category, price, photoUrl, available]
-  );
-  res.status(201).json(result.rows[0]);
+  const { restaurantId, name, description, category, price, originalPrice, offerBadge, photoUrl, available, isVeg } = value;
+  
+  try {
+    const result = await db.query(
+      `INSERT INTO menu_items (restaurant_id, name, description, category, price, original_price, offer_badge, photo_url, available, is_veg)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [restaurantId, name, description || '', category, price, originalPrice || null, offerBadge || null, photoUrl || null, available, isVeg !== false]
+    );
+
+    // Invalidate menu cache
+    try {
+      const menuRoutes = require('./menu');
+      if (menuRoutes.invalidateMenuCache) menuRoutes.invalidateMenuCache(restaurantId);
+      const { getIO } = require('../socket');
+      getIO().emit('menu:updated', result.rows[0]);
+    } catch (e) {}
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Menu insert error:', err);
+    res.status(500).json({ error: err.message || 'Failed to create menu item' });
+  }
 });
 
 router.put('/menu/:id', async (req, res) => {
   const { id } = req.params;
   const schema = Joi.object({
     name: Joi.string().optional(),
-    description: Joi.string().optional(),
+    description: Joi.string().optional().allow(''),
     category: Joi.string().optional(),
     price: Joi.number().precision(2).optional(),
-    photoUrl: Joi.string().uri().optional(),
+    originalPrice: Joi.number().precision(2).optional().allow(null),
+    offerBadge: Joi.string().optional().allow('', null),
+    photoUrl: Joi.string().optional().allow('', null),
     available: Joi.boolean().optional(),
+    isVeg: Joi.boolean().optional(),
   });
   const { error, value } = schema.validate(req.body);
   if (error) return res.status(400).json({ error: error.details[0].message });
+  
+  const columnMap = {
+    photoUrl: 'photo_url',
+    originalPrice: 'original_price',
+    offerBadge: 'offer_badge',
+    isVeg: 'is_veg'
+  };
+
   const fields = [];
   const values = [];
   let idx = 1;
   for (const [key, val] of Object.entries(value)) {
-    const column = key === 'photoUrl' ? 'photo_url' : key;
+    const column = columnMap[key] || key;
     fields.push(`${column} = $${idx}`);
     values.push(val);
     idx++;
   }
   if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
   values.push(id);
-  const query = `UPDATE menu_items SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`;
-  const result = await db.query(query, values);
-  if (result.rowCount === 0) return res.status(404).json({ error: 'Menu item not found' });
-  res.json(result.rows[0]);
+
+  try {
+    const query = `UPDATE menu_items SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`;
+    const result = await db.query(query, values);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Menu item not found' });
+    
+    const updated = result.rows[0];
+
+    // Invalidate cache and broadcast
+    try {
+      const menuRoutes = require('./menu');
+      if (menuRoutes.invalidateMenuCache) menuRoutes.invalidateMenuCache(updated.restaurant_id);
+      const { getIO } = require('../socket');
+      getIO().emit('menu:updated', updated);
+    } catch (e) {}
+
+    res.json(updated);
+  } catch (err) {
+    console.error('Menu update error:', err);
+    res.status(500).json({ error: err.message || 'Failed to update menu item' });
+  }
 });
 
 // Fast one-click availability toggle with real-time broadcast to all table clients
 router.put('/menu/:id/toggle-availability', async (req, res) => {
   const { id } = req.params;
-  const result = await db.query(
-    `UPDATE menu_items 
-     SET available = NOT available 
-     WHERE id = $1 
-     RETURNING id, restaurant_id, name, available`,
-    [id]
-  );
-  if (result.rowCount === 0) return res.status(404).json({ error: 'Menu item not found' });
-  
-  const updatedItem = result.rows[0];
-
-  // Broadcast out-of-stock / restocked update to all table apps
   try {
-    const { getIO } = require('../socket');
-    getIO().emit('menu:availability_changed', updatedItem);
-  } catch (e) {
-    console.warn('Socket broadcast warning:', e.message);
-  }
+    const result = await db.query(
+      `UPDATE menu_items 
+       SET available = NOT available 
+       WHERE id = $1 
+       RETURNING id, restaurant_id, name, available`,
+      [id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Menu item not found' });
+    
+    const updatedItem = result.rows[0];
 
-  res.json({
-    message: `Menu item '${updatedItem.name}' is now ${updatedItem.available ? 'AVAILABLE' : 'UNAVAILABLE'}`,
-    item: updatedItem
-  });
+    // Broadcast out-of-stock / restocked update to all table apps
+    try {
+      const menuRoutes = require('./menu');
+      if (menuRoutes.invalidateMenuCache) menuRoutes.invalidateMenuCache(updatedItem.restaurant_id);
+      const { getIO } = require('../socket');
+      getIO().emit('menu:availability_changed', updatedItem);
+      getIO().emit('menu:updated', updatedItem);
+    } catch (e) {
+      console.warn('Socket broadcast warning:', e.message);
+    }
+
+    res.json({
+      message: `Menu item '${updatedItem.name}' is now ${updatedItem.available ? 'AVAILABLE' : 'UNAVAILABLE'}`,
+      item: updatedItem
+    });
+  } catch (err) {
+    console.error('Toggle error:', err);
+    res.status(500).json({ error: 'Failed to toggle availability' });
+  }
 });
 
 router.delete('/menu/:id', async (req, res) => {
   const { id } = req.params;
-  const result = await db.query('DELETE FROM menu_items WHERE id = $1 RETURNING *', [id]);
-  if (result.rowCount === 0) return res.status(404).json({ error: 'Menu item not found' });
-  res.json({ message: 'Deleted', item: result.rows[0] });
+  try {
+    const result = await db.query('DELETE FROM menu_items WHERE id = $1 RETURNING *', [id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Menu item not found' });
+    const deleted = result.rows[0];
+
+    try {
+      const menuRoutes = require('./menu');
+      if (menuRoutes.invalidateMenuCache) menuRoutes.invalidateMenuCache(deleted.restaurant_id);
+      const { getIO } = require('../socket');
+      getIO().emit('menu:updated', { id, deleted: true });
+    } catch (e) {}
+
+    res.json({ message: 'Deleted', item: deleted });
+  } catch (err) {
+    console.error('Delete menu item error:', err);
+    res.status(500).json({ error: 'Failed to delete menu item' });
+  }
 });
 
 // PUT /api/admin/restaurant/:id/tax – configure restaurant tax percentage & currency
@@ -258,6 +482,7 @@ router.get('/orders', async (req, res) => {
   try {
     let query = `
       SELECT o.id, o.restaurant_id, o.status, o.subtotal, o.tax_percentage, o.tax_amount, o.total, o.payment_method, o.notes, o.created_at, o.updated_at,
+             o.session_token, o.session_label,
              t.number AS table_number, t.id AS table_id,
              c.name AS customer_name, c.phone AS customer_phone,
              COALESCE(
@@ -267,7 +492,8 @@ router.get('/orders', async (req, res) => {
                    'quantity', oi.quantity,
                    'price', oi.price_at_order,
                    'item_name', mi.name,
-                   'category', mi.category
+                   'category', mi.category,
+                   'status', oi.status
                  )
                ) FILTER (WHERE oi.id IS NOT NULL), '[]'
              ) AS items
@@ -287,7 +513,7 @@ router.get('/orders', async (req, res) => {
       params.push(status);
       query += ` AND o.status = $${params.length}`;
     }
-    query += ` GROUP BY o.id, t.number, t.id, c.name, c.phone ORDER BY o.created_at DESC`;
+    query += ` GROUP BY o.id, t.number, t.id, c.name, c.phone, o.session_token, o.session_label ORDER BY o.created_at DESC`;
 
     const result = await db.query(query, params);
     res.json(result.rows);
@@ -371,6 +597,9 @@ router.get('/customers/:id/history', async (req, res) => {
 });
 
 // ----- Comprehensive Analytics Dashboard -----
+const analyticsRouter = require('./analytics');
+router.use('/analytics', analyticsRouter);
+
 router.get('/analytics/overview', async (req, res) => {
   const { restaurantId } = req.query;
   try {
@@ -485,7 +714,7 @@ router.get('/analytics/overview', async (req, res) => {
   }
 });
 
-// GET /api/admin/feedback – customer ratings and reviews feed
+// GET /api/admin/feedback – customer ratings and reviews feed with AI Intelligence
 router.get('/feedback', async (req, res) => {
   const { restaurantId } = req.query;
   try {
@@ -496,33 +725,32 @@ router.get('/feedback', async (req, res) => {
              t.number AS table_number,
              c.name AS customer_name, c.phone AS customer_phone
       FROM order_feedback f
-      JOIN orders o ON f.order_id = o.id
+      LEFT JOIN orders o ON f.order_id = o.id
       LEFT JOIN tables t ON o.table_id = t.id
       LEFT JOIN customers c ON o.customer_id = c.id
       ${restaurantId ? 'WHERE f.restaurant_id = $1' : ''}
       ORDER BY f.created_at DESC
     `;
     const result = await db.query(query, params);
+    const reviews = result.rows.map(r => ({
+      ...r,
+      order_total: r.order_total ? parseFloat(r.order_total) : 0
+    }));
 
-    // Summary calculation
-    const avgQuery = `
-      SELECT 
-        COUNT(id) AS total_reviews,
-        COALESCE(ROUND(AVG(rating), 2), 0) AS average_rating
-      FROM order_feedback
-      ${restaurantId ? 'WHERE restaurant_id = $1' : ''}
-    `;
-    const avgRes = await db.query(avgQuery, params);
+    const reviewAiService = require('../services/reviewAiService');
+    const aiAnalysis = await reviewAiService.generateNeuralSummaryWithFallback(reviews);
 
     res.json({
       summary: {
-        totalReviews: parseInt(avgRes.rows[0].total_reviews, 10),
-        averageRating: parseFloat(avgRes.rows[0].average_rating)
+        totalReviews: aiAnalysis.totalReviews,
+        averageRating: aiAnalysis.averageRating,
+        goodReviewsCount: aiAnalysis.goodReviewsCount,
+        badReviewsCount: aiAnalysis.badReviewsCount,
+        goodPercentage: aiAnalysis.goodPercentage,
+        badPercentage: aiAnalysis.badPercentage
       },
-      reviews: result.rows.map(r => ({
-        ...r,
-        order_total: parseFloat(r.order_total)
-      }))
+      aiAnalysis,
+      reviews
     });
   } catch (err) {
     console.error('Fetch feedback error:', err);
@@ -538,6 +766,7 @@ router.get('/service-requests', async (req, res) => {
     const params = [];
     let query = `
       SELECT sr.id, sr.request_type, sr.status, sr.created_at, sr.resolved_at,
+             sr.session_token, sr.session_label, sr.customer_name,
              t.number AS table_number, t.id AS table_id,
              ROUND(EXTRACT(EPOCH FROM (now() - sr.created_at)) / 60) AS elapsed_minutes
       FROM service_requests sr
@@ -766,6 +995,86 @@ router.delete('/coupons/:id', async (req, res) => {
     res.json({ message: 'Coupon deactivated successfully', coupon: result.rows[0] });
   } catch (err) {
     console.error('Deactivate coupon error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// GET /api/admin/upi – get current restaurant UPI configuration
+router.get('/upi', async (req, res) => {
+  const { restaurantId } = req.query;
+  try {
+    let result;
+    if (restaurantId) {
+      result = await db.query(`SELECT id, name, upi_id, upi_name FROM restaurants WHERE id = $1`, [restaurantId]);
+    } else {
+      result = await db.query(`SELECT id, name, upi_id, upi_name FROM restaurants LIMIT 1`);
+    }
+
+    if (result.rowCount === 0) {
+      return res.json({
+        upiId: 'vallipriya1212-1@oksbi',
+        upiName: 'Royal Spice Bistro',
+        restaurantName: 'Royal Spice Bistro'
+      });
+    }
+
+    const row = result.rows[0];
+    res.json({
+      restaurantId: row.id,
+      restaurantName: row.name,
+      upiId: row.upi_id || 'vallipriya1212-1@oksbi',
+      upiName: row.upi_name || 'Royal Spice Bistro'
+    });
+  } catch (err) {
+    console.error('Get UPI settings error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// PUT /api/admin/upi – update restaurant UPI ID and Payee Name
+router.put('/upi', async (req, res) => {
+  const schema = Joi.object({
+    restaurantId: Joi.string().uuid().optional().allow(null, ''),
+    upiId: Joi.string().trim().pattern(/^[\w.-]+@[\w.-]+$/).required().messages({
+      'string.pattern.base': 'Please enter a valid UPI VPA ID (e.g. yourname@oksbi or 9876543210@paytm)'
+    }),
+    upiName: Joi.string().trim().min(2).max(100).required()
+  });
+
+  const { error, value } = schema.validate(req.body);
+  if (error) return res.status(400).json({ error: error.details[0].message });
+
+  const { restaurantId, upiId, upiName } = value;
+
+  try {
+    let result;
+    if (restaurantId) {
+      result = await db.query(
+        `UPDATE restaurants SET upi_id = $1, upi_name = $2 WHERE id = $3 RETURNING id, name, upi_id, upi_name`,
+        [upiId, upiName, restaurantId]
+      );
+    } else {
+      result = await db.query(
+        `UPDATE restaurants SET upi_id = $1, upi_name = $2 RETURNING id, name, upi_id, upi_name`,
+        [upiId, upiName]
+      );
+    }
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Restaurant not found' });
+    }
+
+    const updated = result.rows[0];
+    res.json({
+      success: true,
+      message: 'UPI payment settings updated successfully!',
+      upiId: updated.upi_id,
+      upiName: updated.upi_name,
+      restaurantId: updated.id,
+      restaurantName: updated.name
+    });
+  } catch (err) {
+    console.error('Update UPI settings error:', err);
     res.status(500).json({ error: 'Database error' });
   }
 });

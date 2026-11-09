@@ -13,6 +13,7 @@ router.get('/tickets', async (req, res) => {
   try {
     let query = `
       SELECT o.id AS id, o.id AS order_id, o.restaurant_id, o.status, o.notes, o.created_at, o.updated_at,
+             o.session_token, o.session_label,
              ROUND(EXTRACT(EPOCH FROM (now() - o.created_at)) / 60) AS elapsed_minutes,
              t.number AS table_number, t.id AS table_id,
              c.name AS customer_name,
@@ -42,7 +43,7 @@ router.get('/tickets', async (req, res) => {
       query += ` AND o.restaurant_id = $${params.length}`;
     }
 
-    query += ` GROUP BY o.id, t.number, t.id, c.name HAVING COUNT(oi.id) FILTER (WHERE oi.status IS NULL OR oi.status != 'SERVED') > 0 ORDER BY o.created_at ASC`;
+    query += ` GROUP BY o.id, t.number, t.id, c.name, o.session_token, o.session_label HAVING COUNT(oi.id) FILTER (WHERE oi.status IS NULL OR oi.status != 'SERVED') > 0 ORDER BY o.created_at ASC`;
 
     const result = await db.query(query, params);
     const tickets = result.rows.map(ticket => ({
@@ -78,7 +79,7 @@ router.put('/tickets/:id/advance', async (req, res) => {
   }
 
   try {
-    const orderRes = await db.query('SELECT id, status, table_id, restaurant_id FROM orders WHERE id = $1', [orderId]);
+    const orderRes = await db.query('SELECT id, status, table_id, restaurant_id, session_token, session_label FROM orders WHERE id = $1', [orderId]);
     if (orderRes.rowCount === 0) return res.status(404).json({ error: 'Order not found' });
 
     const currentStatus = orderRes.rows[0].status;
@@ -123,7 +124,7 @@ router.put('/tickets/:id/advance', async (req, res) => {
       `UPDATE orders 
        SET status = $1, updated_at = now() 
        WHERE id = $2 
-       RETURNING id, table_id, status, total, updated_at`,
+       RETURNING id, table_id, status, total, session_token, session_label, updated_at`,
       [nextStatus, orderId]
     );
 
@@ -135,6 +136,8 @@ router.put('/tickets/:id/advance', async (req, res) => {
       const advancePayload = {
         orderId,
         tableId: updatedOrder.table_id,
+        sessionToken: updatedOrder.session_token,
+        sessionLabel: updatedOrder.session_label,
         previousStatus: currentStatus,
         newStatus: nextStatus,
         status: nextStatus,
@@ -144,8 +147,16 @@ router.put('/tickets/:id/advance', async (req, res) => {
       io.emit('order:status_updated', advancePayload);
       io.to(`table_${updatedOrder.table_id}`).emit('order:update', {
         orderId,
-        status: nextStatus
+        status: nextStatus,
+        sessionLabel: updatedOrder.session_label
       });
+      if (updatedOrder.session_token) {
+        io.to(`session_${updatedOrder.session_token}`).emit('order:update', {
+          orderId,
+          status: nextStatus,
+          sessionLabel: updatedOrder.session_label
+        });
+      }
     } catch (e) {
       console.warn('Socket emit warning:', e.message);
     }

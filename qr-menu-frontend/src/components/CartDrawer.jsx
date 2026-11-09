@@ -1,14 +1,23 @@
 import React, { useState } from 'react';
-import { X, Trash2, Plus, Minus, Tag, Users, CheckCircle2, AlertCircle, Sparkles, Lock, Unlock, Receipt, ChefHat } from 'lucide-react';
+import { X, Trash2, Plus, Minus, Tag, Users, CheckCircle2, AlertCircle, Sparkles, Lock, Unlock, Receipt, ChefHat, Smartphone } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { api } from '../api';
-import confetti from 'canvas-confetti';
 
-export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
+const triggerConfetti = async (opts) => {
+  try {
+    const { default: confetti } = await import('canvas-confetti');
+    confetti(opts);
+  } catch (err) {
+    console.warn('Confetti animation skipped', err);
+  }
+};
+
+export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiModal }) {
   const {
     tableId,
     tableNumber,
     restaurantId,
+    sessionToken,
     customerName,
     customerPhone,
     consentGiven,
@@ -25,6 +34,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
     discountAmount,
     taxAmount,
     grandTotal,
+    dietaryStats,
     hasActiveSession,
     activeOrder,
     checkSession,
@@ -48,6 +58,39 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
   const [isRemovingItem, setIsRemovingItem] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  const itemsList = Object.values(cartItems);
+
+  // Active table order dietary calculation (Always called at top level for consistent hook counts)
+  const activeDietaryStats = React.useMemo(() => {
+    if (!activeOrder?.items || !Array.isArray(activeOrder.items)) return { vegCount: 0, nonVegCount: 0, vegTotal: 0, nonVegTotal: 0 };
+    let vegCount = 0;
+    let nonVegCount = 0;
+    let vegTotal = 0;
+    let nonVegTotal = 0;
+
+    activeOrder.items.forEach((it) => {
+      const name = it.name || it.item_name || '';
+      const isVeg = it.is_veg !== undefined
+        ? Boolean(it.is_veg)
+        : !(name.toLowerCase().includes('chicken') ||
+            name.toLowerCase().includes('mutton') ||
+            name.toLowerCase().includes('fish') ||
+            name.toLowerCase().includes('meat') ||
+            name.toLowerCase().includes('egg') ||
+            name.toLowerCase().includes('prawn'));
+      const lineTotal = parseFloat(it.line_total || (it.price_at_order * it.quantity) || 0);
+      if (isVeg) {
+        vegCount += it.quantity;
+        vegTotal += lineTotal;
+      } else {
+        nonVegCount += it.quantity;
+        nonVegTotal += lineTotal;
+      }
+    });
+
+    return { vegCount, nonVegCount, vegTotal, nonVegTotal };
+  }, [activeOrder]);
+
   const isOrderEditable = Boolean(hasActiveSession && activeOrder && activeOrder.status === 'PENDING');
 
   // Remove dish from active order (allowed ONLY before preparation starts for that dish)
@@ -70,10 +113,6 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
     }
   };
 
-  if (!isOpen) return null;
-
-  const itemsList = Object.values(cartItems);
-
   // Calculate bill split on the fly
   const handleCalculateSplit = async (ways) => {
     setSplitWays(ways);
@@ -94,6 +133,8 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
       });
     }
   };
+
+  if (!isOpen) return null;
 
   // Apply Coupon
   const handleApplyCoupon = async (e) => {
@@ -161,7 +202,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
 
         await api.addItemsToOrder(activeOrder.id, itemsPayload);
         
-        confetti({
+        triggerConfetti({
           particleCount: 80,
           spread: 60,
           origin: { y: 0.8 },
@@ -176,6 +217,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
         const orderPayload = {
           restaurantId,
           tableId,
+          sessionToken: sessionToken || null,
           customer: {
             name: nameInput.trim(),
             phone: phoneInput.trim(),
@@ -190,7 +232,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
 
         const res = await api.createOrder(orderPayload);
         
-        confetti({
+        triggerConfetti({
           particleCount: 120,
           spread: 80,
           origin: { y: 0.7 },
@@ -297,53 +339,68 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
                       {isOrderEditable ? 'Tap Cancel to remove' : 'Locked for cooking'}
                     </span>
                   </div>
-                  {(activeOrder.items || []).map((it) => (
-                    <div
-                      key={it.id}
-                      className="flex items-center justify-between text-xs py-2 border-b border-stone-200/60 last:border-0"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-black text-stone-900 bg-stone-200 px-2 py-0.5 rounded-md text-xs">
-                          {it.quantity}x
-                        </span>
-                        <div>
-                          <span className="font-bold text-stone-900 text-xs block">{it.name || it.item_name}</span>
-                          <span className="text-[10px] text-stone-500">₹{parseFloat(it.price_at_order || 0).toFixed(2)} each</span>
+                  {(activeOrder.items || []).map((it) => {
+                    const itemName = it.name || it.item_name || '';
+                    const itIsVeg = it.is_veg !== undefined
+                      ? Boolean(it.is_veg)
+                      : !(itemName.toLowerCase().includes('chicken') ||
+                          itemName.toLowerCase().includes('mutton') ||
+                          itemName.toLowerCase().includes('fish') ||
+                          itemName.toLowerCase().includes('meat') ||
+                          itemName.toLowerCase().includes('egg') ||
+                          itemName.toLowerCase().includes('prawn'));
+
+                    return (
+                      <div
+                        key={it.id}
+                        className="flex items-center justify-between text-xs py-2 border-b border-stone-200/60 last:border-0"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-black text-stone-900 bg-stone-200 px-2 py-0.5 rounded-md text-xs shrink-0">
+                            {it.quantity}x
+                          </span>
+                          <div className={`w-3 h-3 border flex items-center justify-center shrink-0 rounded-2xs ${itIsVeg ? 'border-emerald-600' : 'border-rose-600'}`}>
+                            <div className={`w-1 h-1 rounded-full ${itIsVeg ? 'bg-emerald-600' : 'bg-rose-600'}`}></div>
+                          </div>
+                          <div className="min-w-0">
+                            <span className="font-bold text-stone-900 text-xs block truncate">{itemName}</span>
+                            <span className="text-[10px] text-stone-500">₹{parseFloat(it.price_at_order || 0).toFixed(2)} each</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="font-black text-stone-900 text-xs">
+                            ₹{parseFloat(it.line_total || it.price_at_order * it.quantity || 0).toFixed(2)}
+                          </span>
+                          {it.status === 'SERVED' ? (
+                            <span className="text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-2xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Served</span>
+                            </span>
+                          ) : it.status === 'READY' ? (
+                            <span className="text-[10px] text-sky-800 bg-sky-50 border border-sky-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-2xs">
+                              <Sparkles className="w-3 h-3 text-sky-600" />
+                              <span>Ready</span>
+                            </span>
+                          ) : it.status === 'PREPARING' ? (
+                            <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-2xs">
+                              <Lock className="w-3 h-3 text-amber-600" />
+                              <span>Cooking</span>
+                            </span>
+                          ) : (
+                            <button
+                              disabled={isRemovingItem}
+                              onClick={() => handleRemoveActiveItem(it.id)}
+                              className="px-2 py-1 text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-rose-600 rounded-lg transition flex items-center gap-1 text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                              title="Cancel / Remove dish"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Cancel</span>
+                            </button>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="font-black text-stone-900 text-xs">
-                          ₹{parseFloat(it.line_total || it.price_at_order * it.quantity || 0).toFixed(2)}
-                        </span>
-                        {it.status === 'SERVED' ? (
-                          <span className="text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-2xs">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            <span>Served</span>
-                          </span>
-                        ) : it.status === 'READY' ? (
-                          <span className="text-[10px] text-sky-800 bg-sky-50 border border-sky-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-2xs">
-                            <Sparkles className="w-3 h-3 text-sky-600" />
-                            <span>Ready</span>
-                          </span>
-                        ) : it.status === 'PREPARING' ? (
-                          <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-2xs">
-                            <Lock className="w-3 h-3 text-amber-600" />
-                            <span>Cooking</span>
-                          </span>
-                        ) : (
-                          <button
-                            disabled={isRemovingItem}
-                            onClick={() => handleRemoveActiveItem(it.id)}
-                            className="px-2 py-1 text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-rose-600 rounded-lg transition flex items-center gap-1 text-[11px] font-bold cursor-pointer disabled:opacity-50"
-                            title="Cancel / Remove dish"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Cancel</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Bill Math Breakdown */}
@@ -352,6 +409,16 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
                     <span>Placed Items Subtotal</span>
                     <span>₹{parseFloat(activeOrder.subtotal || 0).toFixed(2)}</span>
                   </div>
+                  {(activeDietaryStats.vegCount > 0 || activeDietaryStats.nonVegCount > 0) && (
+                    <div className="flex justify-between text-stone-500 text-[11px]">
+                      <span>Dietary Split</span>
+                      <span className="font-semibold text-stone-700">
+                        {activeDietaryStats.vegCount > 0 ? `${activeDietaryStats.vegCount} Veg (₹${activeDietaryStats.vegTotal.toFixed(0)})` : ''}
+                        {activeDietaryStats.vegCount > 0 && activeDietaryStats.nonVegCount > 0 ? ' • ' : ''}
+                        {activeDietaryStats.nonVegCount > 0 ? `${activeDietaryStats.nonVegCount} Non-Veg (₹${activeDietaryStats.nonVegTotal.toFixed(0)})` : ''}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-stone-500">
                     <span>GST (5%)</span>
                     <span>₹{parseFloat(activeOrder.taxAmount || 0).toFixed(2)}</span>
@@ -363,6 +430,24 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
                     </span>
                   </div>
                 </div>
+
+                {/* Instant UPI Payment Button */}
+                {onOpenUpiModal && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenUpiModal({
+                        amount: parseFloat(activeOrder.total || activeOrder.total_amount || 0),
+                        orderId: activeOrder.id,
+                        tableNumber
+                      });
+                    }}
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer mt-1"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span>Pay Bill via UPI (Dynamic QR / Apps)</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -395,43 +480,107 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {itemsList.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-3 rounded-xl bg-stone-50 border border-stone-200/60"
-                    >
-                      <div className="flex-1 pr-3">
-                        <p className="font-bold text-stone-900 text-sm leading-tight">{item.name}</p>
-                        <p className="text-xs text-stone-500 mt-0.5">
-                          ₹{parseFloat(item.price).toFixed(2)} each
-                        </p>
-                      </div>
+                  {itemsList.map((item) => {
+                    const itemIsVeg = item.is_veg !== undefined
+                      ? Boolean(item.is_veg)
+                      : !(item.name?.toLowerCase().includes('chicken') ||
+                          item.name?.toLowerCase().includes('mutton') ||
+                          item.name?.toLowerCase().includes('fish') ||
+                          item.name?.toLowerCase().includes('meat') ||
+                          item.name?.toLowerCase().includes('egg') ||
+                          item.name?.toLowerCase().includes('prawn'));
 
-                      <div className="flex items-center gap-3">
-                        <div className="inline-flex items-center bg-white rounded-lg border border-stone-200 shadow-2xs">
-                          <button
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                            className="w-7 h-7 flex items-center justify-center text-stone-700 hover:bg-stone-100"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="w-6 text-center text-xs font-bold text-stone-900">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                            className="w-7 h-7 flex items-center justify-center text-stone-700 hover:bg-stone-100"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between p-3 rounded-xl bg-stone-50 border border-stone-200/60"
+                      >
+                        <div className="flex-1 pr-3 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <div className={`w-3 h-3 border flex items-center justify-center shrink-0 rounded-2xs ${itemIsVeg ? 'border-emerald-600' : 'border-rose-600'}`}>
+                              <div className={`w-1 h-1 rounded-full ${itemIsVeg ? 'bg-emerald-600' : 'bg-rose-600'}`}></div>
+                            </div>
+                            <p className="font-bold text-stone-900 text-sm leading-tight truncate">{item.name}</p>
+                          </div>
+                          <p className="text-xs text-stone-500 mt-1 pl-4.5">
+                            ₹{parseFloat(item.price).toFixed(2)} each &bull; <span className={itemIsVeg ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>{itemIsVeg ? 'Veg' : 'Non-Veg'}</span>
+                          </p>
                         </div>
 
-                        <span className="font-bold text-sm text-stone-900 w-16 text-right">
-                          ₹{(parseFloat(item.price) * item.quantity).toFixed(2)}
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="inline-flex items-center bg-white rounded-lg border border-stone-200 shadow-2xs">
+                            <button
+                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                              className="w-7 h-7 flex items-center justify-center text-stone-700 hover:bg-stone-100"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="w-6 text-center text-xs font-bold text-stone-900">
+                              {item.quantity}
+                            </span>
+                            <button
+                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              className="w-7 h-7 flex items-center justify-center text-stone-700 hover:bg-stone-100"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          <span className="font-bold text-sm text-stone-900 w-16 text-right">
+                            ₹{(parseFloat(item.price) * item.quantity).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Dietary Calculation Summary Box */}
+                  {itemsList.length > 0 && (
+                    <div className="p-3 bg-white rounded-2xl border border-stone-200/90 shadow-2xs space-y-2.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-stone-800 uppercase tracking-wider text-[11px]">
+                          Dietary Breakdown & Calculation
+                        </span>
+                        <span className="text-[10px] text-stone-400 font-semibold">
+                          {(dietaryStats?.vegCount || 0) + (dietaryStats?.nonVegCount || 0)} items total
                         </span>
                       </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {/* Veg Calculation Card */}
+                        <div className="p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <div className="w-3 h-3 border border-emerald-600 flex items-center justify-center rounded-2xs">
+                              <div className="w-1 h-1 rounded-full bg-emerald-600"></div>
+                            </div>
+                            <span className="text-xs font-bold text-emerald-950">Pure Veg</span>
+                          </div>
+                          <p className="text-base font-black text-emerald-900">
+                            ₹{(dietaryStats?.vegSubtotal || 0).toFixed(2)}
+                          </p>
+                          <p className="text-[10px] text-emerald-700 font-medium">
+                            {dietaryStats?.vegCount || 0} {dietaryStats?.vegCount === 1 ? 'portion' : 'portions'}
+                          </p>
+                        </div>
+
+                        {/* Non-Veg Calculation Card */}
+                        <div className="p-2.5 rounded-xl bg-rose-50/80 border border-rose-200">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <div className="w-3 h-3 border border-rose-600 flex items-center justify-center rounded-2xs">
+                              <div className="w-1 h-1 rounded-full bg-rose-600"></div>
+                            </div>
+                            <span className="text-xs font-bold text-rose-950">Non-Veg</span>
+                          </div>
+                          <p className="text-base font-black text-rose-900">
+                            ₹{(dietaryStats?.nonVegSubtotal || 0).toFixed(2)}
+                          </p>
+                          <p className="text-[10px] text-rose-700 font-medium">
+                            {dietaryStats?.nonVegCount || 0} {dietaryStats?.nonVegCount === 1 ? 'portion' : 'portions'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
@@ -596,6 +745,16 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
                   <span>{hasActiveSession ? 'New Additions Subtotal' : 'Food Subtotal'}</span>
                   <span className="font-semibold text-stone-900">₹{subtotal.toFixed(2)}</span>
                 </div>
+                {(dietaryStats?.vegCount > 0 || dietaryStats?.nonVegCount > 0) && (
+                  <div className="flex justify-between text-[11px] text-stone-500">
+                    <span>Dietary Calculation</span>
+                    <span className="font-medium text-stone-700">
+                      {dietaryStats.vegCount > 0 ? `${dietaryStats.vegCount} Veg (₹${dietaryStats.vegSubtotal.toFixed(0)})` : ''}
+                      {dietaryStats.vegCount > 0 && dietaryStats.nonVegCount > 0 ? ' • ' : ''}
+                      {dietaryStats.nonVegCount > 0 ? `${dietaryStats.nonVegCount} Non-Veg (₹${dietaryStats.nonVegTotal.toFixed(0)})` : ''}
+                    </span>
+                  </div>
+                )}
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-emerald-600 font-semibold">
                     <span>Coupon Discount</span>
@@ -617,12 +776,30 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess }) {
 
             {/* CTA Buttons */}
             {hasActiveSession && itemsList.length === 0 ? (
-              <button
-                onClick={onClose}
-                className="w-full py-3.5 bg-stone-900 hover:bg-stone-800 text-white font-black text-xs uppercase tracking-wider rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>+ Browse Menu to Add More Dishes</span>
-              </button>
+              <div className="space-y-2">
+                {onOpenUpiModal && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenUpiModal({
+                        amount: parseFloat(activeOrder?.total || activeOrder?.total_amount || 0),
+                        orderId: activeOrder?.id,
+                        tableNumber
+                      });
+                    }}
+                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-black text-xs uppercase tracking-wider rounded-xl transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span>⚡ Pay Bill via Dynamic UPI (QR & Apps)</span>
+                  </button>
+                )}
+                <button
+                  onClick={onClose}
+                  className="w-full py-3 bg-stone-900 hover:bg-stone-800 text-white font-black text-xs uppercase tracking-wider rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>+ Browse Menu to Add More Dishes</span>
+                </button>
+              </div>
             ) : (
               <button
                 disabled={isSubmitting || itemsList.length === 0}

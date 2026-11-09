@@ -74,7 +74,7 @@ export default function KitchenPage() {
       try {
         const res = await fetch('/api/order/tables/default');
         const data = await res.json();
-        const rId = data.table?.restaurant_id || '2dbedc29-66a4-43fd-9dbb-68f86f5608e5';
+        const rId = data.table?.restaurant_id || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
         setRestaurantId(rId);
         await loadTickets(rId);
       } catch {
@@ -330,13 +330,25 @@ function KDSTicketCard({ ticket, onAdvance, nextLabel, nextColor, isCompleted })
       <div>
         {/* Ticket Top Meta */}
         <div className="flex items-center justify-between pb-3 border-b border-stone-800">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-black text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-xl border border-amber-400/20">
-              Table #{ticket.table_number || ticket.tableNumber || '1'}
-            </span>
-            <span className="text-xs text-stone-400 font-medium">
-              #{ticket.id?.slice(0, 6)}
-            </span>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-base font-black text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-xl border border-amber-400/20">
+                Table #{ticket.table_number || ticket.tableNumber || '1'}
+              </span>
+              <span className="text-xs text-stone-400 font-mono">
+                #{ticket.id?.slice(0, 6)}
+              </span>
+            </div>
+            {/* Customer Session Identifier */}
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-xs font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-lg border border-sky-500/20">
+                {ticket.session_label || ticket.sessionLabel || 'Customer'}
+                {ticket.customer_name ? ` (${ticket.customer_name})` : ''}
+              </span>
+              <span className="text-[10px] text-stone-500 font-mono">
+                {createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            </div>
           </div>
           {getUrgencyBadge()}
         </div>

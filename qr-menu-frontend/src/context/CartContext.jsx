@@ -9,6 +9,8 @@ export function CartProvider({ children }) {
   const [restaurantId, setRestaurantId] = useState('');
   
   // Customer & Session state
+  const [sessionToken, setSessionToken] = useState('');
+  const [sessionLabel, setSessionLabel] = useState('Customer 1');
   const [customerName, setCustomerName] = useState(localStorage.getItem('qr_customer_name') || '');
   const [customerPhone, setCustomerPhone] = useState(localStorage.getItem('qr_customer_phone') || '');
   const [consentGiven, setConsentGiven] = useState(localStorage.getItem('qr_consent_given') === 'true');
@@ -31,47 +33,103 @@ export function CartProvider({ children }) {
     localStorage.setItem('qr_consent_given', String(consent));
   };
 
-  // Check active table session
+  // Check and initialize active customer session for this table
   const checkSession = async (tblId) => {
     if (!tblId) return;
     setIsLoadingSession(true);
     try {
-      const data = await api.getTableSession(tblId);
-      setHasActiveSession(Boolean(data.hasActiveSession));
-      if (data.hasActiveSession) {
-        const orderData = data.order || {
-          id: data.orderId || data.id,
-          orderId: data.orderId || data.id,
-          status: data.status,
-          total: data.total || data.total_amount,
-          total_amount: data.total || data.total_amount,
-          subtotal: data.subtotal,
-          taxAmount: data.taxAmount,
-          currency: data.currency || '₹',
-          notes: data.notes,
-          customer_name: data.customer?.name || data.customer_name,
-          customer_phone: data.customer?.phone || data.customer_phone,
-          customer: data.customer || {
-            name: data.customer_name,
-            phone: data.customer_phone,
-          },
-          items: data.items || [],
-        };
-        setActiveOrder(orderData);
-        const custName = orderData.customer?.name || orderData.customer_name;
-        const custPhone = orderData.customer?.phone || orderData.customer_phone;
-        if (custName) {
-          updateCustomerInfo(custName, custPhone || customerPhone, true);
-        }
+      const storedToken = localStorage.getItem(`qr_session_token_${tblId}`);
+      // Initialize or resume customer session for this table
+      const sessionData = await api.initSession(tblId, storedToken);
+
+      const sToken = sessionData.sessionToken;
+      const sLabel = sessionData.sessionLabel || 'Customer 1';
+      setSessionToken(sToken);
+      setSessionLabel(sLabel);
+      localStorage.setItem(`qr_session_token_${tblId}`, sToken);
+      localStorage.setItem(`qr_session_label_${tblId}`, sLabel);
+
+      if (sessionData.customer?.name) {
+        setCustomerName(sessionData.customer.name);
+        setCustomerPhone(sessionData.customer.phone || '');
+        setConsentGiven(Boolean(sessionData.customer.consentGiven));
+      }
+
+      // Check if this specific customer session has an active order
+      const hasOrder = Boolean(sessionData.hasActiveOrder && sessionData.order);
+      setHasActiveSession(hasOrder);
+      if (hasOrder && sessionData.order) {
+        const orderData = sessionData.order;
+        setActiveOrder({
+          id: orderData.id || orderData.orderId,
+          orderId: orderData.id || orderData.orderId,
+          status: orderData.status,
+          total: orderData.total,
+          total_amount: orderData.total,
+          subtotal: orderData.subtotal,
+          taxAmount: orderData.taxAmount,
+          currency: orderData.currency || '₹',
+          notes: orderData.notes,
+          customer_name: orderData.customer?.name || sessionData.customer?.name || customerName,
+          customer_phone: orderData.customer?.phone || sessionData.customer?.phone || customerPhone,
+          items: orderData.items || [],
+        });
       } else {
         setActiveOrder(null);
       }
+
+      // Restore isolated draft cart & cooking notes for this specific customer session
+      try {
+        const savedCart = localStorage.getItem(`qr_cart_${sToken}`);
+        if (savedCart) {
+          setCartItems(JSON.parse(savedCart));
+        } else {
+          setCartItems({});
+        }
+        const savedNotes = localStorage.getItem(`qr_notes_${sToken}`);
+        if (savedNotes) {
+          setCookingNotes(savedNotes);
+        } else {
+          setCookingNotes('');
+        }
+      } catch (e) {}
+      if (sessionData.table?.restaurant_id) {
+        setRestaurantId(sessionData.table.restaurant_id);
+      }
+      if (sessionData.table?.number) {
+        setTableNumber(sessionData.table.number);
+      }
+
+      return sessionData;
     } catch (err) {
       console.warn('Session check warning:', err.message);
+      return null;
     } finally {
       setIsLoadingSession(false);
     }
   };
+
+  // Sync isolated draft cart per session
+  useEffect(() => {
+    if (sessionToken) {
+      if (Object.keys(cartItems).length > 0) {
+        localStorage.setItem(`qr_cart_${sessionToken}`, JSON.stringify(cartItems));
+      } else {
+        localStorage.removeItem(`qr_cart_${sessionToken}`);
+      }
+    }
+  }, [cartItems, sessionToken]);
+
+  // Sync isolated cooking notes per session
+  useEffect(() => {
+    if (sessionToken) {
+      if (cookingNotes) {
+        localStorage.setItem(`qr_notes_${sessionToken}`, cookingNotes);
+      } else {
+        localStorage.removeItem(`qr_notes_${sessionToken}`);
+      }
+    }
+  }, [cookingNotes, sessionToken]);
 
   // Add Item
   const addItem = (item) => {
@@ -120,6 +178,10 @@ export function CartProvider({ children }) {
     setCartItems({});
     setCookingNotes('');
     setAppliedCoupon(null);
+    if (sessionToken) {
+      localStorage.removeItem(`qr_cart_${sessionToken}`);
+      localStorage.removeItem(`qr_notes_${sessionToken}`);
+    }
   };
 
   // Totals calculation
@@ -142,6 +204,41 @@ export function CartProvider({ children }) {
   const taxAmount = parseFloat((taxableAmount * taxRate).toFixed(2));
   const grandTotal = parseFloat((taxableAmount + taxAmount).toFixed(2));
 
+  // Dietary calculations for Veg vs Non-Veg in active cart
+  const dietaryStats = useMemo(() => {
+    let vegCount = 0;
+    let nonVegCount = 0;
+    let vegSubtotal = 0;
+    let nonVegSubtotal = 0;
+
+    Object.values(cartItems).forEach((it) => {
+      const isVeg = it.is_veg !== undefined 
+        ? Boolean(it.is_veg) 
+        : !(it.name?.toLowerCase().includes('chicken') ||
+            it.name?.toLowerCase().includes('mutton') ||
+            it.name?.toLowerCase().includes('fish') ||
+            it.name?.toLowerCase().includes('meat') ||
+            it.name?.toLowerCase().includes('egg') ||
+            it.name?.toLowerCase().includes('prawn'));
+      
+      const itemTotal = parseFloat(it.price || 0) * it.quantity;
+      if (isVeg) {
+        vegCount += it.quantity;
+        vegSubtotal += itemTotal;
+      } else {
+        nonVegCount += it.quantity;
+        nonVegSubtotal += itemTotal;
+      }
+    });
+
+    return {
+      vegCount,
+      nonVegCount,
+      vegSubtotal,
+      nonVegSubtotal,
+    };
+  }, [cartItems]);
+
   return (
     <CartContext.Provider
       value={{
@@ -151,6 +248,10 @@ export function CartProvider({ children }) {
         setTableNumber,
         restaurantId,
         setRestaurantId,
+        sessionToken,
+        setSessionToken,
+        sessionLabel,
+        setSessionLabel,
         customerName,
         customerPhone,
         consentGiven,
@@ -174,6 +275,7 @@ export function CartProvider({ children }) {
         taxRate,
         taxAmount,
         grandTotal,
+        dietaryStats,
       }}
     >
       {children}

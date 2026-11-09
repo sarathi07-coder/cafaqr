@@ -4,6 +4,37 @@ const router = express.Router();
 const db = require('../db');
 const Joi = require('joi');
 
+// In-memory cache for ultra-fast menu delivery (<1ms) under peak diner loads
+const menuCache = new Map();
+const CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
+function getCached(key) {
+  const entry = menuCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    menuCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCached(key, data) {
+  if (menuCache.size > 200) menuCache.clear();
+  menuCache.set(key, { data, timestamp: Date.now() });
+}
+
+function invalidateMenuCache(restaurantId) {
+  if (!restaurantId) {
+    menuCache.clear();
+    return;
+  }
+  for (const key of menuCache.keys()) {
+    if (key.startsWith(restaurantId)) {
+      menuCache.delete(key);
+    }
+  }
+}
+
 // GET /api/menu/:restaurantId/categories
 // Returns list of unique categories available in the restaurant
 router.get('/:restaurantId/categories', async (req, res) => {
@@ -11,6 +42,12 @@ router.get('/:restaurantId/categories', async (req, res) => {
   const schema = Joi.string().uuid().required();
   const { error } = schema.validate(restaurantId);
   if (error) return res.status(400).json({ error: 'Invalid restaurantId' });
+
+  const cacheKey = `${restaurantId}_categories`;
+  const cached = getCached(cacheKey);
+  if (cached) {
+    return res.json(cached);
+  }
 
   try {
     const result = await db.query(
@@ -20,7 +57,9 @@ router.get('/:restaurantId/categories', async (req, res) => {
        ORDER BY category ASC`,
       [restaurantId]
     );
-    res.json(result.rows.map(r => r.category));
+    const categories = result.rows.map(r => r.category);
+    setCached(cacheKey, categories);
+    res.json(categories);
   } catch (err) {
     console.error('Fetch categories error:', err);
     res.status(500).json({ error: 'Database error' });
@@ -37,9 +76,15 @@ router.get('/:restaurantId', async (req, res) => {
   const { error } = schema.validate(restaurantId);
   if (error) return res.status(400).json({ error: 'Invalid restaurantId' });
 
+  const cacheKey = `${restaurantId}_${category || ''}_${availableOnly || ''}_${groupByCategory || ''}`;
+  const cached = getCached(cacheKey);
+  if (cached) {
+    return res.json(cached);
+  }
+
   try {
     let query = `
-      SELECT id, name, description, price, photo_url, COALESCE(category, 'General') AS category, available, created_at 
+      SELECT id, name, description, price, original_price, offer_badge, photo_url, is_veg, COALESCE(category, 'General') AS category, available, created_at 
       FROM menu_items 
       WHERE restaurant_id = $1
     `;
@@ -59,7 +104,10 @@ router.get('/:restaurantId', async (req, res) => {
     const result = await db.query(query, params);
     const items = result.rows.map(item => ({
       ...item,
-      price: parseFloat(item.price)
+      price: parseFloat(item.price),
+      original_price: item.original_price ? parseFloat(item.original_price) : null,
+      offer_badge: item.offer_badge || null,
+      is_veg: item.is_veg !== false
     }));
 
     if (groupByCategory === 'true') {
@@ -75,13 +123,16 @@ router.get('/:restaurantId', async (req, res) => {
         grouped[cat].push(item);
       });
 
-      return res.json({
+      const responsePayload = {
         categories,
         itemsByCategory: grouped,
         totalItems: items.length
-      });
+      };
+      setCached(cacheKey, responsePayload);
+      return res.json(responsePayload);
     }
 
+    setCached(cacheKey, items);
     res.json(items);
   } catch (err) {
     console.error('Menu fetch error:', err);
@@ -89,4 +140,5 @@ router.get('/:restaurantId', async (req, res) => {
   }
 });
 
+router.invalidateMenuCache = invalidateMenuCache;
 module.exports = router;

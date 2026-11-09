@@ -134,3 +134,25 @@ CREATE INDEX IF NOT EXISTS idx_coupons_restaurant ON coupons(restaurant_id);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(10,2) NOT NULL DEFAULT 0;
 
+-- Multi-Customer Independent Table Sessions
+CREATE TABLE IF NOT EXISTS customer_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_token TEXT UNIQUE NOT NULL,
+    table_id UUID REFERENCES tables(id) ON DELETE CASCADE,
+    restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
+    session_label TEXT NOT NULL DEFAULT 'Customer 1',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    last_active TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_sessions_table ON customer_sessions(table_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_customer_sessions_token ON customer_sessions(session_token);
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS session_id UUID REFERENCES customer_sessions(id) ON DELETE SET NULL;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS session_token TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS session_label TEXT;
+CREATE INDEX IF NOT EXISTS idx_orders_session ON orders(session_token);
+
+

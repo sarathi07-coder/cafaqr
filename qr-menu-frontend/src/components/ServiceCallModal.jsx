@@ -2,7 +2,16 @@ import React, { useState } from 'react';
 import { X, Droplets, Utensils, Receipt, BellRing, Check } from 'lucide-react';
 import { api } from '../api';
 
-export default function ServiceCallModal({ isOpen, onClose, tableId, tableNumber, onCallSuccess }) {
+export default function ServiceCallModal({
+  isOpen,
+  onClose,
+  tableId,
+  tableNumber,
+  sessionToken,
+  sessionLabel,
+  customerName,
+  onCallSuccess
+}) {
   const [selectedType, setSelectedType] = useState('WATER');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,7 +29,7 @@ export default function ServiceCallModal({ isOpen, onClose, tableId, tableNumber
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      await api.callWaiter(tableId, selectedType, note);
+      await api.callWaiter(tableId, selectedType, note, sessionToken, sessionLabel, customerName);
       setSentSuccess(true);
       setTimeout(() => {
         setSentSuccess(false);
@@ -40,7 +49,7 @@ export default function ServiceCallModal({ isOpen, onClose, tableId, tableNumber
         <div className="flex items-center justify-between pb-3 border-b border-stone-100">
           <div>
             <h3 className="font-serif font-bold text-base text-stone-900">
-              Table #{tableNumber} Service
+              Table #{tableNumber} {sessionLabel ? `• ${sessionLabel}` : ''}
             </h3>
             <p className="text-xs text-stone-500">How can our staff assist you right now?</p>
           </div>
