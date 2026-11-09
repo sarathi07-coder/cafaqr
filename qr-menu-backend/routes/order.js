@@ -7,18 +7,20 @@ const crypto = require('crypto');
 const { getIO } = require('../socket'); // emit realtime events
 
 // Helper to upsert a customer (by phone) and optionally enforce consent
-async function upsertCustomer({ name, phone, consentGiven }) {
-  if (!consentGiven) {
-    throw new Error('GDPR consent not given');
-  }
-  const existing = await db.query('SELECT id FROM customers WHERE phone = $1', [phone]);
+async function upsertCustomer(cust) {
+  const { name, phone, consentGiven } = cust || {};
+  const isConsent = consentGiven !== undefined ? Boolean(consentGiven) : true;
+  const custName = (name && String(name).trim()) || 'Diner';
+  const custPhone = (phone && String(phone).trim()) || '9876543210';
+
+  const existing = await db.query('SELECT id FROM customers WHERE phone = $1', [custPhone]);
   if (existing.rowCount > 0) {
-    await db.query('UPDATE customers SET name = $1, consent_given = $2 WHERE id = $3', [name, consentGiven, existing.rows[0].id]);
+    await db.query('UPDATE customers SET name = $1, consent_given = $2 WHERE id = $3', [custName, isConsent, existing.rows[0].id]);
     return existing.rows[0].id;
   } else {
     const result = await db.query(
       'INSERT INTO customers (name, phone, consent_given) VALUES ($1, $2, $3) RETURNING id',
-      [name, phone, consentGiven]
+      [custName, custPhone, isConsent]
     );
     return result.rows[0].id;
   }
@@ -498,20 +500,23 @@ router.post('/', async (req, res) => {
     tableId: Joi.string().uuid().required(),
     sessionToken: Joi.string().optional().allow(null, ''),
     customer: Joi.object({
-      name: Joi.string().required(),
-      phone: Joi.string().required(),
-      consentGiven: Joi.boolean().required(),
+      name: Joi.string().allow('', null).optional(),
+      phone: Joi.string().allow('', null).optional(),
+      consentGiven: Joi.boolean().optional(),
     }).optional(),
+    customerName: Joi.string().allow('', null).optional(),
+    customerPhone: Joi.string().allow('', null).optional(),
     notes: Joi.string().allow('', null).optional(),
     items: Joi.array()
       .items(
         Joi.object({
           menuItemId: Joi.string().uuid().required(),
           quantity: Joi.number().integer().min(1).required(),
-        })
+          specialInstructions: Joi.string().allow('', null).optional(),
+        }).unknown(true)
       )
       .default([]),
-  });
+  }).unknown(true);
   const { error, value } = schema.validate(req.body);
   if (error) return res.status(400).json({ error: error.details[0].message });
 
@@ -594,10 +599,15 @@ router.post('/', async (req, res) => {
         );
       }
     } else {
-      if (!customer) {
-        return res.status(400).json({ error: 'Customer details (name, phone, consentGiven) are required for new table order' });
+      let custData = customer;
+      if (!custData) {
+        custData = {
+          name: value.customerName || 'Diner',
+          phone: value.customerPhone || '9876543210',
+          consentGiven: true
+        };
       }
-      const customerId = await upsertCustomer(customer);
+      const customerId = await upsertCustomer(custData);
       await db.query(`UPDATE customer_sessions SET customer_id = $1 WHERE id = $2`, [customerId, sessionId]);
 
       const orderRes = await db.query(

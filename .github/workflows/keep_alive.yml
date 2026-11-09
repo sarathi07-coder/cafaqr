@@ -1,0 +1,23 @@
+name: 24/7 Keep-Alive Pinger
+
+on:
+  schedule:
+    # Runs every 5 minutes 24/7
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    # Allows manual trigger anytime from GitHub Actions tab
+
+jobs:
+  ping:
+    name: Ping Backend & Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Backend & Keep Database Pool Warm
+        run: |
+          echo "Pinging Backend API & Supabase Database..."
+          curl -s -w "\nHTTP Status: %{http_code} | Total Time: %{time_total}s\n" https://cafaqr.vercel.app/health/db
+
+      - name: Ping Frontend Edge CDN
+        run: |
+          echo "Pinging Frontend Edge CDN..."
+          curl -s -w "\nHTTP Status: %{http_code} | Total Time: %{time_total}s\n" https://cafaqr-h5b1.vercel.app/
