@@ -196,16 +196,19 @@ export default function CustomerMenuPage() {
   // Silent background auto-sync so the diner never needs to reload the page
   const prevActiveOrderRef = useRef(null);
 
+  // Smart adaptive background auto-sync: pauses when phone is asleep/tab hidden, relaxes interval when idle
   useEffect(() => {
     if (!tableId) return;
 
-    // Silent background check every 3.5s
+    const intervalTime = activeOrder ? 3800 : 12000; // 3.8s when cooking, 12s when browsing
+
     const pollInterval = setInterval(async () => {
+      if (document.hidden) return; // Don't burn database queries if phone screen is off or tab hidden
       await checkSession(tableId, true);
-    }, 3500);
+    }, intervalTime);
 
     return () => clearInterval(pollInterval);
-  }, [tableId]);
+  }, [tableId, activeOrder]);
 
   // Automatically detect when order status advances or when order is settled/paid to show feedback modal
   useEffect(() => {

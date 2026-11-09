@@ -475,17 +475,31 @@ export const api = {
     return res.json();
   },
 
-  async updateAdminUpi(restaurantId, token, upiId, upiName) {
+  async updateAdminUpi(restaurantId, token, upiId, upiName, passkey) {
     const res = await fetch(`${API_BASE}/admin/upi`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ restaurantId, upiId, upiName })
+      body: JSON.stringify({ restaurantId, upiId, upiName, passkey })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to update UPI settings');
+    return data;
+  },
+
+  async resetAdminUpiPasskey(restaurantId, token, adminPassword, newPasskey) {
+    const res = await fetch(`${API_BASE}/admin/upi/reset-passkey`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ restaurantId, adminPassword, newPasskey })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to reset passkey');
     return data;
   }
 };

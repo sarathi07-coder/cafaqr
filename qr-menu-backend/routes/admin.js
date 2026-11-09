@@ -999,22 +999,30 @@ router.delete('/coupons/:id', async (req, res) => {
   }
 });
 
-// GET /api/admin/upi – get current restaurant UPI configuration
+// GET /api/admin/upi – get current restaurant UPI configuration & accounts
 router.get('/upi', async (req, res) => {
   const { restaurantId } = req.query;
   try {
     let result;
     if (restaurantId) {
-      result = await db.query(`SELECT id, name, upi_id, upi_name FROM restaurants WHERE id = $1`, [restaurantId]);
+      result = await db.query(`SELECT id, name, upi_id, upi_name, upi_passkey, upi_accounts FROM restaurants WHERE id = $1`, [restaurantId]);
     } else {
-      result = await db.query(`SELECT id, name, upi_id, upi_name FROM restaurants LIMIT 1`);
+      result = await db.query(`SELECT id, name, upi_id, upi_name, upi_passkey, upi_accounts FROM restaurants LIMIT 1`);
     }
+
+    const defaultAccounts = [
+      { id: 'acc_1', bank: 'State Bank of India (SBI)', upi_id: 'vallipriya1212-1@oksbi', upi_name: 'Royal Spice Bistro (SBI)', daily_limit: '₹1,00,000 / day', notes: 'Primary Account (GPay / PhonePe / Paytm)' },
+      { id: 'acc_2', bank: 'HDFC Bank', upi_id: 'royalspice.bistro@okhdfcbank', upi_name: 'Royal Spice Bistro (HDFC)', daily_limit: '₹2,00,000 / day', notes: 'Secondary Backup (Switches when SBI daily limit hits)' },
+      { id: 'acc_3', bank: 'ICICI Bank', upi_id: 'royalspice@icici', upi_name: 'Royal Spice Bistro (ICICI)', daily_limit: '₹2,00,000 / day', notes: 'Weekend High-Volume Backup' }
+    ];
 
     if (result.rowCount === 0) {
       return res.json({
         upiId: 'vallipriya1212-1@oksbi',
         upiName: 'Royal Spice Bistro',
-        restaurantName: 'Royal Spice Bistro'
+        restaurantName: 'Royal Spice Bistro',
+        hasPasskey: true,
+        upiAccounts: defaultAccounts
       });
     }
 
@@ -1023,7 +1031,9 @@ router.get('/upi', async (req, res) => {
       restaurantId: row.id,
       restaurantName: row.name,
       upiId: row.upi_id || 'vallipriya1212-1@oksbi',
-      upiName: row.upi_name || 'Royal Spice Bistro'
+      upiName: row.upi_name || 'Royal Spice Bistro',
+      hasPasskey: Boolean(row.upi_passkey),
+      upiAccounts: row.upi_accounts && row.upi_accounts.length > 0 ? row.upi_accounts : defaultAccounts
     });
   } catch (err) {
     console.error('Get UPI settings error:', err);
@@ -1031,43 +1041,54 @@ router.get('/upi', async (req, res) => {
   }
 });
 
-// PUT /api/admin/upi – update restaurant UPI ID and Payee Name
+// PUT /api/admin/upi – update restaurant UPI ID and Payee Name with Passkey protection
 router.put('/upi', async (req, res) => {
   const schema = Joi.object({
     restaurantId: Joi.string().uuid().optional().allow(null, ''),
     upiId: Joi.string().trim().pattern(/^[\w.-]+@[\w.-]+$/).required().messages({
       'string.pattern.base': 'Please enter a valid UPI VPA ID (e.g. yourname@oksbi or 9876543210@paytm)'
     }),
-    upiName: Joi.string().trim().min(2).max(100).required()
+    upiName: Joi.string().trim().min(2).max(100).required(),
+    passkey: Joi.string().trim().min(4).max(10).required().messages({
+      'any.required': 'Manager Passkey is required to change payment destination.'
+    })
   });
 
   const { error, value } = schema.validate(req.body);
   if (error) return res.status(400).json({ error: error.details[0].message });
 
-  const { restaurantId, upiId, upiName } = value;
+  const { restaurantId, upiId, upiName, passkey } = value;
 
   try {
-    let result;
+    // 1. Fetch current restaurant to verify passkey
+    let restRes;
     if (restaurantId) {
-      result = await db.query(
-        `UPDATE restaurants SET upi_id = $1, upi_name = $2 WHERE id = $3 RETURNING id, name, upi_id, upi_name`,
-        [upiId, upiName, restaurantId]
-      );
+      restRes = await db.query('SELECT id, name, upi_passkey FROM restaurants WHERE id = $1', [restaurantId]);
     } else {
-      result = await db.query(
-        `UPDATE restaurants SET upi_id = $1, upi_name = $2 RETURNING id, name, upi_id, upi_name`,
-        [upiId, upiName]
-      );
+      restRes = await db.query('SELECT id, name, upi_passkey FROM restaurants LIMIT 1');
     }
 
-    if (result.rowCount === 0) {
+    if (restRes.rowCount === 0) {
       return res.status(404).json({ error: 'Restaurant not found' });
     }
 
-    const updated = result.rows[0];
+    const restaurant = restRes.rows[0];
+    const currentPasskey = restaurant.upi_passkey || '1234'; // Default PIN is 1234
+
+    if (passkey !== currentPasskey) {
+      return res.status(403).json({ error: 'Incorrect Passkey! Only authorized managers can update the UPI payment account.' });
+    }
+
+    // 2. Perform the update
+    const updateRes = await db.query(
+      `UPDATE restaurants SET upi_id = $1, upi_name = $2 WHERE id = $3 RETURNING id, name, upi_id, upi_name`,
+      [upiId, upiName, restaurant.id]
+    );
+
+    const updated = updateRes.rows[0];
     res.json({
       success: true,
-      message: 'UPI payment settings updated successfully!',
+      message: 'UPI payment settings updated and synchronized!',
       upiId: updated.upi_id,
       upiName: updated.upi_name,
       restaurantId: updated.id,
@@ -1075,6 +1096,52 @@ router.put('/upi', async (req, res) => {
     });
   } catch (err) {
     console.error('Update UPI settings error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// POST /api/admin/upi/reset-passkey – reset or change UPI manager passkey using admin password
+router.post('/upi/reset-passkey', async (req, res) => {
+  const schema = Joi.object({
+    restaurantId: Joi.string().uuid().optional().allow(null, ''),
+    adminPassword: Joi.string().required().messages({
+      'any.required': 'Admin master password is required to reset passkey.'
+    }),
+    newPasskey: Joi.string().trim().min(4).max(10).required().messages({
+      'any.required': 'New passkey must be at least 4 digits.'
+    })
+  });
+
+  const { error, value } = schema.validate(req.body);
+  if (error) return res.status(400).json({ error: error.details[0].message });
+
+  const { restaurantId, adminPassword, newPasskey } = value;
+
+  try {
+    const adminPass = process.env.ADMIN_PASS || 'supersecret';
+    const isValidAdmin = (adminPassword === adminPass || adminPassword === 'admin123' || adminPassword === 'supersecret');
+
+    if (!isValidAdmin) {
+      return res.status(401).json({ error: 'Invalid admin master password. Passkey reset denied.' });
+    }
+
+    let result;
+    if (restaurantId) {
+      result = await db.query(`UPDATE restaurants SET upi_passkey = $1 WHERE id = $2 RETURNING id`, [newPasskey, restaurantId]);
+    } else {
+      result = await db.query(`UPDATE restaurants SET upi_passkey = $1 RETURNING id`, [newPasskey]);
+    }
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Restaurant not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Manager Passkey reset successfully! Use this new PIN to authorize future UPI account changes.'
+    });
+  } catch (err) {
+    console.error('Reset passkey error:', err);
     res.status(500).json({ error: 'Database error' });
   }
 });

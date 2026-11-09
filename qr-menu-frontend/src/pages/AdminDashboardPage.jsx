@@ -113,9 +113,22 @@ export default function AdminDashboardPage() {
     upiId: 'vallipriya1212-1@oksbi',
     upiName: 'Royal Spice Bistro'
   });
+  const [upiAccounts, setUpiAccounts] = useState([]);
   const [isSavingUpi, setIsSavingUpi] = useState(false);
   const [upiCopied, setUpiCopied] = useState(false);
   const [testUpiAmount, setTestUpiAmount] = useState('150');
+
+  // Manager Security Passkey State
+  const [isPasskeyModalOpen, setIsPasskeyModalOpen] = useState(false);
+  const [passkeyInput, setPasskeyInput] = useState('');
+  const [passkeyError, setPasskeyError] = useState('');
+  const [pendingUpiSwitch, setPendingUpiSwitch] = useState(null);
+
+  // Reset Passkey State
+  const [isResetPasskeyOpen, setIsResetPasskeyOpen] = useState(false);
+  const [resetAdminPass, setResetAdminPass] = useState('');
+  const [resetNewPin, setResetNewPin] = useState('');
+  const [resetStatus, setResetStatus] = useState({ error: '', success: '', loading: false });
 
   const segregatedReviews = React.useMemo(() => {
     const list = feedbackList || [];
@@ -336,6 +349,9 @@ export default function AdminDashboardPage() {
             upiId: upiData.upiId || 'vallipriya1212-1@oksbi',
             upiName: upiData.upiName || 'Royal Spice Bistro'
           });
+          if (upiData.upiAccounts && upiData.upiAccounts.length > 0) {
+            setUpiAccounts(upiData.upiAccounts);
+          }
         }
       } catch {
         // fallback
@@ -365,17 +381,67 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleSaveUpiConfig = async (e) => {
+  const handleInitiateCustomUpiSave = (e) => {
     e.preventDefault();
+    setPendingUpiSwitch({ upiId: upiConfig.upiId, upiName: upiConfig.upiName, bank: 'Custom VPA' });
+    setPasskeyInput('');
+    setPasskeyError('');
+    setIsPasskeyModalOpen(true);
+  };
+
+  const handleInitiatePresetSwitch = (account) => {
+    setPendingUpiSwitch({ upiId: account.upi_id, upiName: account.upi_name, bank: account.bank });
+    setPasskeyInput('');
+    setPasskeyError('');
+    setIsPasskeyModalOpen(true);
+  };
+
+  const handleConfirmPasskeySwitch = async (e) => {
+    e.preventDefault();
+    if (!passkeyInput.trim()) {
+      setPasskeyError('Please enter your 4-digit Manager Passkey');
+      return;
+    }
+
     setIsSavingUpi(true);
+    setPasskeyError('');
+
     try {
-      const res = await api.updateAdminUpi(restaurantId, token, upiConfig.upiId, upiConfig.upiName);
-      setToastMessage('✅ UPI Payment settings updated and synchronized!');
+      const res = await api.updateAdminUpi(
+        restaurantId,
+        token,
+        pendingUpiSwitch.upiId,
+        pendingUpiSwitch.upiName,
+        passkeyInput.trim()
+      );
+      setToastMessage(`✅ Active UPI successfully switched to ${pendingUpiSwitch.bank || res.upiId}!`);
       setUpiConfig({ upiId: res.upiId, upiName: res.upiName });
+      setIsPasskeyModalOpen(false);
+      setPasskeyInput('');
+      setPendingUpiSwitch(null);
     } catch (err) {
-      alert(err.message || 'Failed to update UPI settings');
+      setPasskeyError(err.message || 'Incorrect Passkey. Please try again.');
     } finally {
       setIsSavingUpi(false);
+    }
+  };
+
+  const handleExecuteResetPasskey = async (e) => {
+    e.preventDefault();
+    setResetStatus({ error: '', success: '', loading: true });
+
+    try {
+      const res = await api.resetAdminUpiPasskey(restaurantId, token, resetAdminPass, resetNewPin);
+      setResetStatus({ error: '', success: res.message, loading: false });
+      setToastMessage('🔐 Manager Passkey updated successfully!');
+      setTimeout(() => {
+        setIsResetPasskeyOpen(false);
+        setResetAdminPass('');
+        setResetNewPin('');
+        setResetStatus({ error: '', success: '', loading: false });
+      }, 1500);
+    } catch (err) {
+      setResetStatus({ error: err.message || 'Failed to reset passkey', success: '', loading: false });
     }
   };
 
@@ -475,14 +541,15 @@ export default function AdminDashboardPage() {
     socket.on('feedback:new', handleNewFeedback);
     socket.on('upi:payment_submitted', handleUpiPaymentSubmitted);
 
-    // Periodic auto-refresh every 5s for reliable real-time updates under serverless
+    // Periodic auto-refresh every 5s for reliable real-time updates (pauses when tab is hidden)
     const refreshTimer = setInterval(() => {
+      if (document.hidden) return;
       const activeId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
       if (token) {
         api.getActiveGroupedTables(activeId, token).then(setGroupedTables).catch(() => {});
         api.getAdminOrders(activeId, token).then(setOrdersList).catch(() => {});
       }
-    }, 5000);
+    }, 5500);
 
     return () => {
       socket.off('service:requested', handleServiceRequested);
@@ -2203,80 +2270,140 @@ export default function AdminDashboardPage() {
             {/* Two-Column: Settings & Live QR Simulator */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               
-              {/* Left: UPI VPA Configuration Form */}
-              <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-5">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
-                    Merchant Setup
-                  </span>
-                  <h4 className="font-serif font-bold text-lg text-stone-900 mt-1.5">
-                    Restaurant UPI Configuration
-                  </h4>
-                  <p className="text-xs text-stone-500">
-                    Update the destination UPI VPA ID and merchant payee name used across all customer table QR codes.
-                  </p>
+              {/* Left: UPI Multi-Bank Switcher & Custom Configuration */}
+              <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-6">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                      Bank Limit Switcher
+                    </span>
+                    <h4 className="font-serif font-bold text-lg text-stone-900 mt-1.5">
+                      Bank Accounts & Daily Limits
+                    </h4>
+                    <p className="text-xs text-stone-500">
+                      When your primary bank hits its daily transaction limit (e.g. ₹1 Lakh), switch to a backup account instantly.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsResetPasskeyOpen(true)}
+                    className="text-[11px] font-bold text-stone-600 hover:text-amber-800 bg-stone-100 hover:bg-stone-200 border border-stone-300 px-2.5 py-1 rounded-xl transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Lock className="w-3 h-3 text-amber-600" />
+                    <span>Reset Passkey</span>
+                  </button>
                 </div>
 
-                <form onSubmit={handleSaveUpiConfig} className="space-y-4">
-                  <div>
-                    <label className="text-xs font-bold text-stone-700 block mb-1">
-                      UPI ID / Virtual Payment Address (VPA)
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={upiConfig.upiId}
-                      onChange={(e) => setUpiConfig({ ...upiConfig, upiId: e.target.value.trim() })}
-                      placeholder="e.g. vallipriya1212-1@oksbi"
-                      className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-mono font-bold text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
-                    />
-                    <p className="text-[11px] text-stone-400 mt-1">
-                      Must be a valid handle (e.g. <code>vallipriya1212-1@oksbi</code>, <code>merchant@okhdfcbank</code>).
-                    </p>
+                {/* Preset Accounts List */}
+                <div className="space-y-2.5">
+                  {(upiAccounts.length > 0 ? upiAccounts : [
+                    { id: 'acc_1', bank: 'State Bank of India (SBI)', upi_id: 'vallipriya1212-1@oksbi', upi_name: 'Royal Spice Bistro (SBI)', daily_limit: '₹1,00,000 / day', notes: 'Primary Account (GPay / PhonePe / Paytm)' },
+                    { id: 'acc_2', bank: 'HDFC Bank', upi_id: 'royalspice.bistro@okhdfcbank', upi_name: 'Royal Spice Bistro (HDFC)', daily_limit: '₹2,00,000 / day', notes: 'Secondary Backup (Switches when SBI daily limit hits)' },
+                    { id: 'acc_3', bank: 'ICICI Bank', upi_id: 'royalspice@icici', upi_name: 'Royal Spice Bistro (ICICI)', daily_limit: '₹2,00,000 / day', notes: 'Weekend High-Volume Backup' }
+                  ]).map((acc) => {
+                    const isActive = (upiConfig.upiId || '').toLowerCase() === (acc.upi_id || '').toLowerCase();
+                    return (
+                      <div
+                        key={acc.id}
+                        className={`p-3.5 rounded-2xl border transition-all ${
+                          isActive
+                            ? 'bg-amber-50/60 border-amber-300 ring-2 ring-amber-400/30'
+                            : 'bg-stone-50/80 border-stone-200 hover:border-stone-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-xs text-stone-900">{acc.bank}</span>
+                              {isActive ? (
+                                <span className="bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1">
+                                  <Check className="w-2.5 h-2.5" />
+                                  Active Live
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-semibold text-stone-500 bg-stone-200/70 px-2 py-0.5 rounded-md">
+                                  {acc.daily_limit}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] font-mono font-semibold text-stone-600 mt-0.5">
+                              {acc.upi_id}
+                            </p>
+                            {acc.notes && (
+                              <p className="text-[10px] text-stone-400 mt-0.5">
+                                {acc.notes}
+                              </p>
+                            )}
+                          </div>
+
+                          {!isActive && (
+                            <button
+                              type="button"
+                              onClick={() => handleInitiatePresetSwitch(acc)}
+                              className="px-3 py-1.5 bg-stone-900 hover:bg-amber-600 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0"
+                            >
+                              <Lock className="w-3 h-3 text-amber-400" />
+                              <span>Switch</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="border-t border-stone-200 pt-5">
+                  <div className="mb-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                      Custom VPA Configuration
+                    </span>
+                    <h5 className="font-bold text-xs text-stone-900 mt-0.5">
+                      Or Set a Custom Merchant UPI ID
+                    </h5>
                   </div>
 
-                  <div>
-                    <label className="text-xs font-bold text-stone-700 block mb-1">
-                      Merchant Payee Name (Appears in Diner's UPI App)
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={upiConfig.upiName}
-                      onChange={(e) => setUpiConfig({ ...upiConfig, upiName: e.target.value })}
-                      placeholder="e.g. Royal Spice Bistro"
-                      className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-bold text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
-                    />
-                    <p className="text-[11px] text-stone-400 mt-1">
-                      The official business/merchant name displayed in Google Pay, PhonePe, Paytm, or BHIM.
-                    </p>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 space-y-1">
-                    <div className="font-bold flex items-center gap-1.5 text-emerald-900">
-                      <CheckCircle className="w-4 h-4 text-emerald-600" />
-                      <span>Zero Processing Deductions</span>
+                  <form onSubmit={handleInitiateCustomUpiSave} className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-stone-700 block mb-1">
+                        UPI ID / Virtual Payment Address (VPA)
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={upiConfig.upiId}
+                        onChange={(e) => setUpiConfig({ ...upiConfig, upiId: e.target.value.trim() })}
+                        placeholder="e.g. vallipriya1212-1@oksbi"
+                        className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-mono font-bold text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                      />
+                      <p className="text-[11px] text-stone-400 mt-1">
+                        Must be a valid handle (e.g. <code>vallipriya1212-1@oksbi</code>, <code>merchant@okhdfcbank</code>).
+                      </p>
                     </div>
-                    <p className="text-[11px] text-emerald-800">
-                      Unlike Stripe/Razorpay charging 2–3% per transaction, NPCI UPI peer-to-merchant transfers are direct and free for your restaurant.
-                    </p>
-                  </div>
 
-                  <button
-                    type="submit"
-                    disabled={isSavingUpi}
-                    className="w-full py-3 bg-stone-900 hover:bg-stone-800 disabled:bg-stone-400 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-98"
-                  >
-                    {isSavingUpi ? (
-                      <span>Saving UPI Settings...</span>
-                    ) : (
-                      <>
-                        <Check className="w-4 h-4" />
-                        <span>Save & Synchronize UPI ID</span>
-                      </>
-                    )}
-                  </button>
-                </form>
+                    <div>
+                      <label className="text-xs font-bold text-stone-700 block mb-1">
+                        Merchant Payee Name (Appears in Diner's UPI App)
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={upiConfig.upiName}
+                        onChange={(e) => setUpiConfig({ ...upiConfig, upiName: e.target.value })}
+                        placeholder="e.g. Royal Spice Bistro"
+                        className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-bold text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSavingUpi}
+                      className="w-full py-3 bg-stone-900 hover:bg-stone-800 disabled:bg-stone-400 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                    >
+                      <Lock className="w-4 h-4 text-amber-400" />
+                      <span>Save with Manager Passkey</span>
+                    </button>
+                  </form>
+                </div>
               </div>
 
               {/* Right: Live Dynamic QR Code Simulator */}
@@ -2994,6 +3121,179 @@ export default function AdminDashboardPage() {
                   className="flex-1 py-2.5 text-xs font-black text-stone-950 bg-amber-500 hover:bg-amber-400 rounded-xl transition cursor-pointer shadow-sm"
                 >
                   {editingDishId ? 'Save Changes' : 'Add Food Item'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Manager Passkey Authorization */}
+      {isPasskeyModalOpen && (
+        <div className="fixed inset-0 bg-stone-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-stone-200 animate-scale-in space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                <Lock className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-serif font-bold text-base text-stone-900">
+                  Manager Passkey Required
+                </h4>
+                <p className="text-[11px] text-stone-500">
+                  Authorize payment routing change
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-stone-50 border border-stone-200 rounded-2xl">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500 block">
+                Target Bank Account
+              </span>
+              <p className="text-xs font-bold text-stone-900 mt-0.5">
+                {pendingUpiSwitch?.bank || 'Custom UPI'}
+              </p>
+              <p className="text-[11px] font-mono font-semibold text-amber-700">
+                {pendingUpiSwitch?.upiId}
+              </p>
+            </div>
+
+            {passkeyError && (
+              <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium">
+                {passkeyError}
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmPasskeySwitch} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-stone-700 block mb-1">
+                  Enter 4-Digit Manager PIN
+                </label>
+                <input
+                  type="password"
+                  autoFocus
+                  required
+                  maxLength={10}
+                  value={passkeyInput}
+                  onChange={(e) => setPasskeyInput(e.target.value)}
+                  placeholder="••••"
+                  className="w-full text-center tracking-widest text-lg font-mono font-bold px-3 py-2.5 bg-stone-50 border border-stone-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                />
+                <p className="text-[10px] text-stone-400 text-center mt-1">
+                  Default Manager PIN is <strong className="text-stone-600">1234</strong>
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPasskeyModalOpen(false);
+                    setPasskeyInput('');
+                    setPasskeyError('');
+                    setPendingUpiSwitch(null);
+                  }}
+                  className="flex-1 py-2.5 text-xs font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingUpi}
+                  className="flex-1 py-2.5 text-xs font-bold text-stone-950 bg-amber-500 hover:bg-amber-400 disabled:bg-stone-300 rounded-xl transition cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>{isSavingUpi ? 'Verifying...' : 'Authorize'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Reset Manager Passkey PIN */}
+      {isResetPasskeyOpen && (
+        <div className="fixed inset-0 bg-stone-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-stone-200 animate-scale-in space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-stone-900 text-amber-400 flex items-center justify-center">
+                <Lock className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-serif font-bold text-base text-stone-900">
+                  Reset Manager Passkey
+                </h4>
+                <p className="text-[11px] text-stone-500">
+                  Update your 4-digit security PIN
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-600 leading-relaxed">
+              To prevent unauthorized changes to the receiving bank account, enter the Admin Master Password to set a new PIN.
+            </p>
+
+            {resetStatus.error && (
+              <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium">
+                {resetStatus.error}
+              </div>
+            )}
+
+            {resetStatus.success && (
+              <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-medium">
+                {resetStatus.success}
+              </div>
+            )}
+
+            <form onSubmit={handleExecuteResetPasskey} className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-stone-700 block mb-1">
+                  Admin Master Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={resetAdminPass}
+                  onChange={(e) => setResetAdminPass(e.target.value)}
+                  placeholder="Master Admin Password (e.g. admin123)"
+                  className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-stone-700 block mb-1">
+                  New 4-Digit Passkey PIN
+                </label>
+                <input
+                  type="password"
+                  required
+                  maxLength={10}
+                  value={resetNewPin}
+                  onChange={(e) => setResetNewPin(e.target.value)}
+                  placeholder="e.g. 5678"
+                  className="w-full text-center tracking-widest text-base font-mono font-bold px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsResetPasskeyOpen(false);
+                    setResetAdminPass('');
+                    setResetNewPin('');
+                    setResetStatus({ error: '', success: '', loading: false });
+                  }}
+                  className="flex-1 py-2.5 text-xs font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetStatus.loading}
+                  className="flex-1 py-2.5 text-xs font-black text-stone-950 bg-amber-500 hover:bg-amber-400 disabled:bg-stone-300 rounded-xl transition cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
+                >
+                  <span>{resetStatus.loading ? 'Updating...' : 'Set New PIN'}</span>
                 </button>
               </div>
             </form>

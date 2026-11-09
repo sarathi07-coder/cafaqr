@@ -108,11 +108,12 @@ export default function KitchenPage() {
     socket.on('order:status_updated', handleOrderUpdated);
     socket.on('kitchen:ticket_advanced', handleOrderUpdated);
 
-    // Auto-refresh interval every 4 seconds for instant real-time kitchen updates
+    // Auto-refresh interval every 4.5 seconds (pauses when tab is hidden to save DB connections)
     const timer = setInterval(() => {
+      if (document.hidden) return;
       const targetId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
       loadTickets(targetId);
-    }, 4000);
+    }, 4500);
 
     return () => {
       socket.off('order:new', handleNewOrder);
