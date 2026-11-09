@@ -129,10 +129,12 @@ router.get('/:restaurantId', async (req, res) => {
         totalItems: items.length
       };
       setCached(cacheKey, responsePayload);
+      res.setHeader('Cache-Control', 'public, max-age=15, s-maxage=60, stale-while-revalidate=120');
       return res.json(responsePayload);
     }
 
     setCached(cacheKey, items);
+    res.setHeader('Cache-Control', 'public, max-age=15, s-maxage=60, stale-while-revalidate=120');
     res.json(items);
   } catch (err) {
     console.error('Menu fetch error:', err);

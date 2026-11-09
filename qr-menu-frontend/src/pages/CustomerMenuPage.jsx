@@ -200,7 +200,7 @@ export default function CustomerMenuPage() {
   useEffect(() => {
     if (!tableId) return;
 
-    const intervalTime = activeOrder ? 3800 : 12000; // 3.8s when cooking, 12s when browsing
+    const intervalTime = activeOrder ? 4000 : 18000; // 4s when cooking, 18s when idle/browsing
 
     const pollInterval = setInterval(async () => {
       if (document.hidden) return; // Don't burn database queries if phone screen is off or tab hidden
