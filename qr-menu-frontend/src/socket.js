@@ -1,6 +1,10 @@
 import { io } from 'socket.io-client';
 
-const serverUrl = import.meta.env.VITE_API_URL || window.location.origin;
+const defaultBackend = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+  ? window.location.origin
+  : 'https://cafaqr.vercel.app';
+
+const serverUrl = import.meta.env.VITE_API_URL || defaultBackend;
 
 export const socket = io(serverUrl, {
   autoConnect: true,
