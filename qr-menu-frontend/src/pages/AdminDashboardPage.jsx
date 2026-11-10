@@ -41,7 +41,8 @@ import {
   X,
   Upload,
   Camera,
-  Image,
+  ImageIcon as LucideImage,
+  Lock,
   Smartphone,
   Copy,
   Check,
@@ -49,6 +50,44 @@ import {
 import SafeQRCode from '../components/SafeQRCode';
 import { api } from '../api';
 import { socket } from '../socket';
+
+class TabErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('TabErrorBoundary caught tab error:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 bg-white rounded-3xl border border-rose-200 shadow-sm text-center space-y-3">
+          <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h4 className="font-serif font-bold text-lg text-stone-900">
+            Section Temporarily Unavailable
+          </h4>
+          <p className="text-xs text-stone-500 max-w-md mx-auto">
+            {this.state.error?.message || 'An error occurred while loading this tab.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="px-4 py-2 bg-stone-900 text-white rounded-xl text-xs font-bold hover:bg-stone-800 transition cursor-pointer"
+          >
+            Retry Section
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function AdminDashboardPage() {
   const navigate = useNavigate();
@@ -1546,7 +1585,8 @@ export default function AdminDashboardPage() {
 
         {/* TAB 3: STAFF SERVICE REQUESTS */}
         {activeTab === 'service' && (
-          <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-4 animate-fade-in">
+          <TabErrorBoundary>
+            <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-4 animate-fade-in">
             <div className="flex items-center justify-between pb-4 border-b border-stone-100">
               <div>
                 <h3 className="font-serif font-bold text-base text-stone-900">
@@ -1601,6 +1641,7 @@ export default function AdminDashboardPage() {
               )}
             </div>
           </div>
+          </TabErrorBoundary>
         )}
 
         {/* TAB 4: MENU & FOOD CATALOG STUDIO */}
@@ -2223,7 +2264,8 @@ export default function AdminDashboardPage() {
 
         {/* TAB 8: DYNAMIC UPI PAYMENTS & SETTINGS */}
         {activeTab === 'upi' && (
-          <div className="space-y-6 animate-fade-in">
+          <TabErrorBoundary>
+            <div className="space-y-6 animate-fade-in">
             {/* Header / Benefits Card */}
             <div className="bg-linear-to-r from-stone-900 via-stone-850 to-stone-900 text-white rounded-3xl p-6 shadow-md border border-stone-800">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -2586,6 +2628,7 @@ export default function AdminDashboardPage() {
               )}
             </div>
           </div>
+          </TabErrorBoundary>
         )}
       </main>
 

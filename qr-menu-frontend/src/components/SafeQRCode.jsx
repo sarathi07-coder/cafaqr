@@ -14,26 +14,24 @@ export default function SafeQRCode({
   className = '',
   style = {}
 }) {
-  const qrDataUrl = useMemo(() => {
+  const svgHtml = useMemo(() => {
     if (!value) return '';
     try {
       // Type number 0 enables automatic version selection based on text length
       const qr = qrcode(0, level);
       qr.addData(String(value));
       qr.make();
-      const svgString = qr.createSvgTag({
+      return qr.createSvgTag({
         scalable: true,
         margin: 2
       });
-      return `data:image/svg+xml;utf8,${encodeURIComponent(svgString)}`;
     } catch (err) {
       console.warn('SafeQRCode generation fallback:', err);
-      // Secondary fallback to free public standard QR API
-      return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(value)}`;
+      return '';
     }
-  }, [value, level, size]);
+  }, [value, level]);
 
-  if (!qrDataUrl) {
+  if (!value) {
     return (
       <div
         style={{ width: size, height: size, ...style }}
@@ -44,9 +42,19 @@ export default function SafeQRCode({
     );
   }
 
+  if (svgHtml) {
+    return (
+      <div
+        style={{ width: size, height: size, ...style }}
+        className={`inline-block select-none [&>svg]:w-full [&>svg]:h-full [&>svg]:block ${className}`}
+        dangerouslySetInnerHTML={{ __html: svgHtml }}
+      />
+    );
+  }
+
   return (
     <img
-      src={qrDataUrl}
+      src={`https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(value)}`}
       width={size}
       height={size}
       alt="QR Code"
