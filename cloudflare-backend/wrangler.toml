@@ -6,8 +6,9 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "cafaqr-production-db"
-database_id = "cafaqr-d1-db-id"
+database_id = "06f0da64-181f-440a-84c1-f25f620ee08b"
 
 [vars]
 JWT_SECRET = "cafaqr_cloudflare_secret_token_123"
 ADMIN_PASSWORD = "supersecret"
+

@@ -11,7 +11,8 @@
 | 📱 **Customer QR Menu** | [https://cafaqr-h5b1.vercel.app/order?tableNumber=1](https://cafaqr-h5b1.vercel.app/order?tableNumber=1) | Diner mobile ordering interface | Open on phone or browser |
 | 👨‍🍳 **Kitchen Display (KDS)** | [https://cafaqr-h5b1.vercel.app/kitchen](https://cafaqr-h5b1.vercel.app/kitchen) | Live 3-column chef Kanban board | Live audio alerts enabled |
 | 📊 **Admin & Cashier Portal** | [https://cafaqr-h5b1.vercel.app/admin](https://cafaqr-h5b1.vercel.app/admin) | Table oversight, billing, analytics | **User:** `admin`<br>**Pass:** `supersecret` or `admin123` |
-| ⚡ **API Health & DB Status** | [https://cafaqr.vercel.app/health/db](https://cafaqr.vercel.app/health/db) | Supabase PostgreSQL diagnostic | Status: `{"status":"ok","database":"connected"}` |
+| ⚡ **Cloudflare Worker & D1 API** | [https://cafaqr-api.p7404467.workers.dev/health/db](https://cafaqr-api.p7404467.workers.dev/health/db) | Cloudflare Edge & D1 diagnostic | Status: `{"status":"ok","database":"cloudflare_d1_connected"}` |
+| ⚡ **Vercel API Health** | [https://cafaqr.vercel.app/health/db](https://cafaqr.vercel.app/health/db) | Supabase PostgreSQL diagnostic | Status: `{"status":"ok","database":"connected"}` |
 
 > **Manager Passkey for UPI Switching:** `1234`  
 > **Source Code Repository:** [https://github.com/sarathi07-coder/cafaqr](https://github.com/sarathi07-coder/cafaqr)

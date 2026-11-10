@@ -1,6 +1,6 @@
 const defaultBackend = typeof window !== 'undefined' && window.location.hostname === 'localhost'
   ? ''
-  : 'https://cafaqr.vercel.app';
+  : 'https://cafaqr-api.p7404467.workers.dev';
 
 const BASE_URL = (import.meta.env.VITE_API_URL || defaultBackend).replace(/\/+$/, '');
 const API_BASE = `${BASE_URL}/api`;
