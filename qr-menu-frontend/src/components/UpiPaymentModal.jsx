@@ -16,6 +16,32 @@ import {
 import { api } from '../api';
 import { socket } from '../socket';
 
+// Isolated QR Error Boundary to prevent any SVG/canvas rendering issue from crashing the menu
+class QRErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err) {
+    console.warn('QRErrorBoundary caught:', err);
+  }
+  render() {
+    if (this.state.hasError || !this.props.value) {
+      return (
+        <div className="w-[190px] h-[190px] flex flex-col items-center justify-center bg-stone-50 border border-stone-200 rounded-xl p-3 mx-auto">
+          <Smartphone className="w-8 h-8 text-emerald-600 mb-1" />
+          <span className="text-[11px] font-bold text-stone-800">Scan via UPI App</span>
+          <span className="text-[10px] text-stone-500 mt-1">Tap green button below</span>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function UpiPaymentModal({
   isOpen,
   onClose,
@@ -228,13 +254,15 @@ export default function UpiPaymentModal({
               {/* Dynamic QR Code Card */}
               <div className="bg-white rounded-2xl border-2 border-dashed border-stone-200 p-4 text-center shadow-xs">
                 <div className="inline-block p-3 bg-white rounded-2xl shadow-sm border border-stone-100">
-                  <QRCodeSVG
-                    value={upiUri}
-                    size={190}
-                    level="M"
-                    includeMargin={false}
-                    className="mx-auto"
-                  />
+                  <QRErrorBoundary value={upiUri}>
+                    <QRCodeSVG
+                      value={upiUri}
+                      size={190}
+                      level="M"
+                      includeMargin={false}
+                      className="mx-auto"
+                    />
+                  </QRErrorBoundary>
                 </div>
 
                 <div className="mt-3 flex items-center justify-center gap-2 text-stone-500 text-xs font-semibold">

@@ -6,16 +6,6 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
-    // Code-splitting: separate vendor chunks so browser caches them independently
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-socket': ['socket.io-client'],
-          'vendor-icons': ['lucide-react'],
-        },
-      },
-    },
     // Inline small assets for fewer HTTP requests
     assetsInlineLimit: 8192,
   },

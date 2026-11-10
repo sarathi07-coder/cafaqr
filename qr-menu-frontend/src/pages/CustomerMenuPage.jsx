@@ -12,6 +12,23 @@ import { useCart } from '../context/CartContext';
 import { api } from '../api';
 import { socket } from '../socket';
 
+class SafeModalBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err) {
+    console.warn('SafeModalBoundary caught modal exception:', err);
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
 export default function CustomerMenuPage() {
   const [searchParams] = useSearchParams();
   const urlTableId = searchParams.get('tableId') || '';
@@ -603,19 +620,21 @@ export default function CustomerMenuPage() {
       />
 
       {/* Dynamic UPI Payment Modal */}
-      <UpiPaymentModal
-        isOpen={isUpiModalOpen}
-        onClose={() => setIsUpiModalOpen(false)}
-        amount={upiPaymentData.amount || parseFloat(activeOrder?.total || activeOrder?.total_amount || 0)}
-        tableId={tableId || ''}
-        tableNumber={tableNumber || '1'}
-        orderId={upiPaymentData.orderId || activeOrder?.id}
-        sessionToken={sessionToken || ''}
-        customerName={customerName || ''}
-        upiId="vallipriya1212-1@oksbi"
-        upiName="Royal Spice Bistro"
-        onPaymentSuccess={handleUpiPaymentSuccess}
-      />
+      <SafeModalBoundary>
+        <UpiPaymentModal
+          isOpen={isUpiModalOpen}
+          onClose={() => setIsUpiModalOpen(false)}
+          amount={upiPaymentData.amount || parseFloat(activeOrder?.total || activeOrder?.total_amount || 0)}
+          tableId={tableId || ''}
+          tableNumber={tableNumber || '1'}
+          orderId={upiPaymentData.orderId || activeOrder?.id}
+          sessionToken={sessionToken || ''}
+          customerName={customerName || ''}
+          upiId="vallipriya1212-1@oksbi"
+          upiName="Royal Spice Bistro"
+          onPaymentSuccess={handleUpiPaymentSuccess}
+        />
+      </SafeModalBoundary>
 
       {/* Service Request / Call Waiter Modal */}
       <ServiceCallModal
