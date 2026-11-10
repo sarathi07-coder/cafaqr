@@ -1,9 +1,10 @@
 import React from 'react';
-import { UtensilsCrossed, BellRing, ChefHat, LayoutDashboard, Receipt } from 'lucide-react';
+import { BellRing, ChefHat, LayoutDashboard, Receipt, Phone, MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import KrishLogo from './KrishLogo';
 
 export default function Navbar({
-  restaurantName = 'Royal Spice Bistro',
+  restaurantName = 'KRISH Cafe & Restaurant',
   tableNumber,
   sessionLabel,
   customerName,
@@ -12,60 +13,70 @@ export default function Navbar({
   onCallWaiter
 }) {
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-xs transition-all">
-      <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-        {/* Brand & Table */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-linear-to-tr from-amber-600 to-amber-400 flex items-center justify-center text-white shadow-md shadow-amber-500/20">
-            <UtensilsCrossed className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="font-serif font-bold text-base md:text-lg text-stone-900 tracking-tight leading-none">
-              {restaurantName}
-            </h1>
-            {tableNumber && (
-              <span className="inline-flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                Table #{tableNumber} {sessionLabel ? `• ${sessionLabel}` : ''}{customerName ? ` (${customerName})` : ''}
-              </span>
-            )}
-          </div>
+    <header className="sticky top-0 z-40 bg-[#0B0B0D]/92 backdrop-blur-xl border-b border-white/10 shadow-[0_4px_25px_rgba(0,0,0,0.6)] transition-all">
+      <div className="max-w-5xl mx-auto px-4 h-16 sm:h-18 flex items-center justify-between gap-3">
+        {/* Brand Logo & Table Indicator */}
+        <div className="flex items-center gap-3 min-w-0">
+          <Link to="/" className="shrink-0 flex items-center">
+            <KrishLogo size="sm" />
+          </Link>
+
+          {tableNumber && (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full krish-glass-gold border border-amber-400/30 text-xs font-bold text-amber-300 shrink-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_#10b981]" />
+              <span className="font-mono">Table #{tableNumber}</span>
+              {sessionLabel && <span className="hidden sm:inline font-normal text-stone-400">&bull; {sessionLabel}</span>}
+              {customerName && <span className="hidden md:inline font-normal text-stone-300">({customerName})</span>}
+            </div>
+          )}
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
+        {/* Action Controls & Quick Links */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Tap-to-Call Contact */}
+          <a
+            href="tel:8760633322"
+            title="Call Restaurant: 8760633322"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-stone-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition active:scale-95"
+          >
+            <Phone className="w-3.5 h-3.5 text-amber-400" />
+            <span className="font-mono">8760633322</span>
+          </a>
+
           {hasActiveSession && onViewBill && (
             <button
+              type="button"
               onClick={onViewBill}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 transition active:scale-95 border border-emerald-300 cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/30 transition active:scale-95 border border-emerald-500/40 cursor-pointer shadow-xs"
             >
-              <Receipt className="w-3.5 h-3.5 text-emerald-700" />
-              <span>View Bill</span>
+              <Receipt className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Bill</span>
             </button>
           )}
 
           {onCallWaiter && (
             <button
+              type="button"
               onClick={onCallWaiter}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-amber-100 hover:text-amber-800 transition active:scale-95 border border-stone-200 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-stone-200 bg-white/5 hover:bg-amber-400/20 hover:text-amber-300 transition active:scale-95 border border-white/10 cursor-pointer"
             >
-              <BellRing className="w-3.5 h-3.5 text-amber-600" />
-              <span className="hidden sm:inline">Call Waiter</span>
+              <BellRing className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden xs:inline">Call Staff</span>
             </button>
           )}
 
-          {/* Quick Demo Links */}
+          {/* Quick Staff Navigation */}
           <Link
             to="/kitchen"
-            title="Kitchen Display Screen"
-            className="p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition"
+            title="Kitchen Display Screen (KDS)"
+            className="p-2 text-stone-400 hover:text-amber-300 hover:bg-white/10 rounded-xl transition cursor-pointer"
           >
             <ChefHat className="w-4 h-4" />
           </Link>
           <Link
             to="/admin"
-            title="Owner Dashboard"
-            className="p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition"
+            title="Owner & Cashier Command Center"
+            className="p-2 text-stone-400 hover:text-amber-300 hover:bg-white/10 rounded-xl transition cursor-pointer"
           >
             <LayoutDashboard className="w-4 h-4" />
           </Link>
@@ -74,4 +85,3 @@ export default function Navbar({
     </header>
   );
 }
-

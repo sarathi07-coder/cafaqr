@@ -20,8 +20,8 @@ export default function ServiceCallModal({
   if (!isOpen) return null;
 
   const requestOptions = [
-    { type: 'WATER', label: 'Cold Water', icon: Droplets, desc: 'Fresh bottled or filtered water' },
-    { type: 'CUTLERY', label: 'Cutlery & Napkins', icon: Utensils, desc: 'Extra forks, spoons or tissues' },
+    { type: 'WATER', label: 'Cold Water', icon: Droplets, desc: 'Fresh bottled or chilled water' },
+    { type: 'CUTLERY', label: 'Cutlery & Napkins', icon: Utensils, desc: 'Extra spoons, forks, tissues' },
     { type: 'BILL', label: 'Request Bill', icon: Receipt, desc: 'Ready for table checkout' },
     { type: 'CALL_WAITER', label: 'Call Waiter', icon: BellRing, desc: 'General table assistance' },
   ];
@@ -44,18 +44,19 @@ export default function ServiceCallModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/60 backdrop-blur-xs animate-fade-in">
-      <div className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl border border-stone-200">
-        <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-md animate-fade-in">
+      <div className="w-full max-w-sm bg-[#120F0C] rounded-3xl p-5 shadow-2xl border border-white/15 text-stone-100">
+        <div className="flex items-center justify-between pb-3 border-b border-white/10">
           <div>
-            <h3 className="font-serif font-bold text-base text-stone-900">
+            <h3 className="font-bold text-base text-white">
               Table #{tableNumber} {sessionLabel ? `• ${sessionLabel}` : ''}
             </h3>
-            <p className="text-xs text-stone-500">How can our staff assist you right now?</p>
+            <p className="text-xs text-amber-300/80">How can our team assist you right now?</p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-100 transition"
+            className="p-1.5 text-stone-400 hover:text-white rounded-full hover:bg-white/10 transition cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -63,11 +64,11 @@ export default function ServiceCallModal({
 
         {sentSuccess ? (
           <div className="py-8 text-center space-y-2">
-            <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
-              <Check className="w-6 h-6" />
+            <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full flex items-center justify-center mx-auto shadow-inner">
+              <Check className="w-6 h-6 stroke-[3]" />
             </div>
-            <p className="font-bold text-stone-900 text-sm">Waiter Notified!</p>
-            <p className="text-xs text-stone-500">A team member will be right with you at Table #{tableNumber}.</p>
+            <p className="font-bold text-white text-sm">Waiter Notified!</p>
+            <p className="text-xs text-stone-400">A team member will be right with you at Table #{tableNumber}.</p>
           </div>
         ) : (
           <div className="py-4 space-y-3">
@@ -78,18 +79,19 @@ export default function ServiceCallModal({
                 return (
                   <button
                     key={opt.type}
+                    type="button"
                     onClick={() => setSelectedType(opt.type)}
-                    className={`p-3 rounded-2xl border text-left transition-all ${
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
                       isSelected
-                        ? 'border-amber-500 bg-amber-50/70 shadow-xs'
-                        : 'border-stone-200 bg-stone-50/50 hover:bg-stone-100'
+                        ? 'krish-glass-gold border-amber-400/80 shadow-[0_4px_16px_rgba(255,196,0,0.2)]'
+                        : 'bg-stone-900/80 border-white/10 hover:border-white/20'
                     }`}
                   >
-                    <Icon className={`w-5 h-5 mb-1.5 ${isSelected ? 'text-amber-600' : 'text-stone-600'}`} />
-                    <p className={`text-xs font-bold ${isSelected ? 'text-amber-950' : 'text-stone-900'}`}>
+                    <Icon className={`w-5 h-5 mb-1.5 ${isSelected ? 'text-amber-300' : 'text-stone-400'}`} />
+                    <p className={`text-xs font-bold ${isSelected ? 'text-white' : 'text-stone-200'}`}>
                       {opt.label}
                     </p>
-                    <p className="text-[10px] text-stone-500 leading-tight mt-0.5">{opt.desc}</p>
+                    <p className="text-[10px] text-stone-400 leading-tight mt-0.5">{opt.desc}</p>
                   </button>
                 );
               })}
@@ -101,14 +103,15 @@ export default function ServiceCallModal({
                 placeholder="Optional note (e.g. 2 glasses, warm water)"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-xl border border-stone-200 outline-none focus:border-amber-500"
+                className="w-full text-xs p-2.5 rounded-xl border border-white/15 bg-stone-900 text-white placeholder-stone-500 outline-none focus:border-amber-400"
               />
             </div>
 
             <button
+              type="button"
               disabled={isSubmitting}
               onClick={handleSubmit}
-              className="w-full py-2.5 bg-stone-900 hover:bg-amber-600 text-white font-bold text-xs rounded-xl transition shadow-xs disabled:bg-stone-300"
+              className="w-full py-3 krish-gradient-gold hover:brightness-110 text-stone-950 font-black text-xs uppercase tracking-wider rounded-xl transition shadow-[0_4px_16px_rgba(255,196,0,0.35)] cursor-pointer disabled:opacity-40"
             >
               {isSubmitting ? 'Summoning...' : 'Alert Staff'}
             </button>
@@ -118,4 +121,3 @@ export default function ServiceCallModal({
     </div>
   );
 }
-

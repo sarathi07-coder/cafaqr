@@ -48,6 +48,7 @@ import {
   Check,
 } from 'lucide-react';
 import SafeQRCode from '../components/SafeQRCode';
+import KrishLogo from '../components/KrishLogo';
 import { api } from '../api';
 import { socket } from '../socket';
 
@@ -149,8 +150,8 @@ export default function AdminDashboardPage() {
   // UPI Management & Incoming Payments States
   const [incomingUpiPayments, setIncomingUpiPayments] = useState([]);
   const [upiConfig, setUpiConfig] = useState({
-    upiId: 'vallipriya1212-1@oksbi',
-    upiName: 'Royal Spice Bistro'
+    upiId: '8760633322@oksbi',
+    upiName: 'KRISH Cafe & Restaurant'
   });
   const [upiAccounts, setUpiAccounts] = useState([]);
   const [isSavingUpi, setIsSavingUpi] = useState(false);
@@ -352,10 +353,10 @@ export default function AdminDashboardPage() {
       ]);
 
       if (overviewData) setOverview(overviewData);
-      setServiceRequests(serviceData);
-      setMenuItems(menuData.items || menuData);
-      setFeedbackList(feedbackData.reviews || (Array.isArray(feedbackData) ? feedbackData : []));
-      setCoupons(couponData);
+      setServiceRequests(Array.isArray(serviceData) ? serviceData : []);
+      setMenuItems(Array.isArray(menuData) ? menuData : (Array.isArray(menuData?.items) ? menuData.items : []));
+      setFeedbackList(Array.isArray(feedbackData?.reviews) ? feedbackData.reviews : (Array.isArray(feedbackData) ? feedbackData : []));
+      setCoupons(Array.isArray(couponData) ? couponData : []);
       setOrdersList(Array.isArray(ordersData) ? ordersData : []);
       setGroupedTables(Array.isArray(groupedData) ? groupedData : []);
 
@@ -375,7 +376,7 @@ export default function AdminDashboardPage() {
       // Fetch bulk QR / tables
       try {
         const qrBatch = await api.getBulkQRCodes(rId);
-        setTables(qrBatch.tables || []);
+        setTables(Array.isArray(qrBatch?.tables) ? qrBatch.tables : []);
       } catch {
         // fallback
       }
@@ -385,10 +386,10 @@ export default function AdminDashboardPage() {
         const upiData = await api.getAdminUpi(rId, token);
         if (upiData?.upiId) {
           setUpiConfig({
-            upiId: upiData.upiId || 'vallipriya1212-1@oksbi',
-            upiName: upiData.upiName || 'Royal Spice Bistro'
+            upiId: upiData.upiId || '8760633322@oksbi',
+            upiName: upiData.upiName || 'KRISH Cafe & Restaurant'
           });
-          if (upiData.upiAccounts && upiData.upiAccounts.length > 0) {
+          if (Array.isArray(upiData.upiAccounts) && upiData.upiAccounts.length > 0) {
             setUpiAccounts(upiData.upiAccounts);
           }
         }
@@ -535,15 +536,15 @@ export default function AdminDashboardPage() {
     function handleOrderActivity() {
       if (restaurantId && token) {
         api.getAdminOverview(restaurantId, token).then(setOverview).catch(() => {});
-        api.getAdminOrders(restaurantId, token).then(setOrdersList).catch(() => {});
-        api.getActiveGroupedTables(restaurantId, token).then(setGroupedTables).catch(() => {});
+        api.getAdminOrders(restaurantId, token).then((o) => setOrdersList(Array.isArray(o) ? o : [])).catch(() => {});
+        api.getActiveGroupedTables(restaurantId, token).then((g) => setGroupedTables(Array.isArray(g) ? g : [])).catch(() => {});
       }
     }
 
     function handleMenuRefresh() {
       if (restaurantId) {
         api.getMenu(restaurantId).then((m) => {
-          setMenuItems(Array.isArray(m) ? m : (m?.items || []));
+          setMenuItems(Array.isArray(m) ? m : (Array.isArray(m?.items) ? m.items : []));
         }).catch(() => {});
       }
     }
@@ -552,7 +553,7 @@ export default function AdminDashboardPage() {
       setToastMessage(`🌟 New ${fb.rating}/5 Star Review from Table #${fb.tableId || 'Diner'}!`);
       if (restaurantId && token) {
         api.getFeedbackList(restaurantId, token).then((data) => {
-          setFeedbackList(data.reviews || (Array.isArray(data) ? data : []));
+          setFeedbackList(Array.isArray(data?.reviews) ? data.reviews : (Array.isArray(data) ? data : []));
         }).catch(() => {});
         api.getReviewsAI(restaurantId, token).then(setReviewsAI).catch(() => {});
       }
@@ -725,42 +726,43 @@ export default function AdminDashboardPage() {
       )}
 
       {/* Admin Top Navigation */}
-      <header className="h-16 bg-white border-b border-stone-200 px-6 flex items-center justify-between sticky top-0 z-40">
+      <header className="h-16 bg-[#120F0B]/95 backdrop-blur-xl border-b border-white/10 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-amber-600 to-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-amber-500/20">
-            <Receipt className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="font-serif font-bold text-base text-stone-900 leading-tight">
-              Royal Spice Bistro &bull; Executive Portal
+          <KrishLogo size="sm" showHat={true} showSubtitle={false} />
+          <div className="hidden sm:block border-l border-white/15 pl-3">
+            <h1 className="font-serif font-black text-sm text-white leading-tight flex items-center gap-2">
+              <span>KRISH Cafe & Restaurant</span>
+              <span className="text-[10px] uppercase font-bold tracking-widest bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">
+                EXECUTIVE
+              </span>
             </h1>
-            <p className="text-[11px] text-stone-500">
-              Live Operations &bull; Restaurant ID: {restaurantId?.slice(0, 8)}
+            <p className="text-[11px] text-stone-400">
+              Live Operations &bull; Rathinam College Front Gate, Eachanari
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <Link
             to="/kitchen"
-            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 text-stone-950 hover:bg-amber-400 transition flex items-center gap-1.5 shadow-xs"
+            className="px-3 py-1.5 rounded-xl text-xs font-black krish-gradient-gold text-stone-950 transition flex items-center gap-1.5 shadow-md active:scale-95"
           >
             <ChefHat className="w-4 h-4" />
-            <span>Launch KDS</span>
+            <span className="hidden sm:inline">Launch KDS</span>
           </Link>
 
           <a
             href={api.getSalesCSVUrl(restaurantId)}
             download
-            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-stone-100 hover:bg-stone-200 text-stone-700 transition flex items-center gap-1.5 border border-stone-200"
+            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-stone-900 hover:bg-stone-800 text-stone-300 transition flex items-center gap-1.5 border border-white/10"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>Export CSV</span>
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            <span className="hidden md:inline">Export CSV</span>
           </a>
 
           <button
             onClick={() => loadAllData(restaurantId)}
-            className="p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-xl transition"
+            className="p-2 text-stone-400 hover:text-white hover:bg-stone-900 rounded-xl transition cursor-pointer border border-white/10"
             title="Refresh All Metrics"
           >
             <RefreshCw className="w-4 h-4" />
@@ -768,7 +770,7 @@ export default function AdminDashboardPage() {
 
           <button
             onClick={handleLogout}
-            className="p-2 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+            className="p-2 text-stone-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition cursor-pointer border border-white/10"
             title="Log Out"
           >
             <LogOut className="w-4 h-4" />
@@ -777,7 +779,7 @@ export default function AdminDashboardPage() {
       </header>
 
       {/* Tab Navigation Ribbon */}
-      <div className="bg-white border-b border-stone-200 px-6 py-2 overflow-x-auto no-scrollbar">
+      <div className="bg-[#0B0B0D]/95 backdrop-blur-xl border-b border-white/10 px-4 sm:px-6 py-2 overflow-x-auto no-scrollbar sticky top-16 z-30">
         <div className="flex gap-2">
           {[
             { id: 'overview', label: 'Bento Overview', icon: TrendingUp },
@@ -797,14 +799,14 @@ export default function AdminDashboardPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
                   isActive
-                    ? 'bg-stone-900 text-white shadow-xs'
-                    : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
+                    ? 'krish-gradient-gold text-stone-950 font-black shadow-md'
+                    : 'text-stone-400 hover:bg-stone-900 hover:text-white'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-amber-400' : 'text-stone-500'}`} />
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-stone-950' : 'text-stone-400'}`} />
                 <span>{tab.label}</span>
                 {tab.badge && (
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
                 )}
               </button>
             );
@@ -1687,8 +1689,8 @@ export default function AdminDashboardPage() {
 
             {/* Menu Items Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {menuItems
-                .filter((it) => selectedMenuCategory === 'ALL' || (it.category || '').toLowerCase() === selectedMenuCategory.toLowerCase())
+              {(Array.isArray(menuItems) ? menuItems : [])
+                .filter((it) => selectedMenuCategory === 'ALL' || (it?.category || '').toLowerCase() === selectedMenuCategory.toLowerCase())
                 .map((item) => {
                   const isAvail = item.is_available !== false && item.available !== false;
                   const hasOffer = item.original_price && parseFloat(item.original_price) > parseFloat(item.price);
@@ -1857,8 +1859,8 @@ export default function AdminDashboardPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {(tables || []).map((tbl) => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+              {(Array.isArray(tables) ? tables : []).map((tbl) => {
                 const tableIdVal = tbl.tableId || tbl.table_id || tbl.id;
                 const tableNumVal = tbl.tableNumber || tbl.table_number || tbl.number;
                 const qrSrc = tbl.qrCodeDataUrl || tbl.qr_data_url || tbl.qr_code_url || `/api/qr/${tableIdVal}`;
@@ -1867,35 +1869,48 @@ export default function AdminDashboardPage() {
                 return (
                   <div
                     key={tableIdVal}
-                    className="p-5 rounded-3xl bg-stone-50 border border-stone-200 text-center flex flex-col items-center justify-between"
+                    className="p-5 rounded-3xl bg-stone-900 border border-amber-500/20 text-center flex flex-col items-center justify-between shadow-xl relative overflow-hidden"
                   >
-                    <span className="font-black text-sm text-stone-900">
-                      Table #{tableNumVal}
-                    </span>
+                    {/* Branded Stand Header */}
+                    <div className="w-full flex items-center justify-between pb-3 border-b border-white/10">
+                      <div className="flex items-center gap-1.5">
+                        <img src="/krish_logo.png" alt="KRISH Logo" className="h-6 w-auto object-contain" />
+                        <span className="font-serif font-black text-xs text-amber-300 tracking-tight">KRISH</span>
+                      </div>
+                      <span className="text-xs font-black uppercase text-stone-950 bg-amber-400 px-2.5 py-0.5 rounded-lg shadow-sm">
+                        TABLE #{tableNumVal}
+                      </span>
+                    </div>
 
-                    <div className="my-3 p-3 bg-white rounded-2xl shadow-xs border border-stone-100">
+                    <div className="my-3 p-4 bg-white rounded-2xl shadow-lg border border-stone-100 flex flex-col items-center w-full">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-stone-700 mb-2">
+                        Scan with GPay / PhonePe / Camera
+                      </p>
                       <img
                         src={qrSrc}
                         alt={`Table ${tableNumVal} QR`}
-                        className="w-36 h-36 mx-auto object-contain"
+                        className="w-40 h-40 mx-auto object-contain"
                       />
+                      <p className="text-[10px] text-stone-500 font-bold mt-2">
+                        Order & Pay Instantly via UPI
+                      </p>
                     </div>
 
                     <div className="w-full space-y-2 pt-1">
                       <div className="flex gap-2 w-full">
                         <a
                           href={`/api/qr/${tableIdVal}`}
-                          download={`table_${tableNumVal}_qr.png`}
-                          className="flex-1 py-1.5 bg-stone-900 hover:bg-stone-800 text-white text-[11px] font-bold rounded-xl transition text-center"
+                          download={`krish_table_${tableNumVal}_qr.png`}
+                          className="flex-1 py-2 bg-stone-800 hover:bg-stone-700 text-amber-300 text-[11px] font-bold rounded-xl transition text-center border border-white/10"
                         >
-                          PNG
+                          Download PNG
                         </a>
                         <a
                           href={`/api/qr/${tableIdVal}?format=svg`}
-                          download={`table_${tableNumVal}_qr.svg`}
-                          className="flex-1 py-1.5 bg-stone-200 hover:bg-stone-300 text-stone-800 text-[11px] font-bold rounded-xl transition text-center"
+                          download={`krish_table_${tableNumVal}_qr.svg`}
+                          className="flex-1 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 text-[11px] font-bold rounded-xl transition text-center border border-white/10"
                         >
-                          SVG
+                          Vector SVG
                         </a>
                       </div>
 
@@ -1903,9 +1918,9 @@ export default function AdminDashboardPage() {
                         href={orderLink}
                         target="_blank"
                         rel="noreferrer"
-                        className="w-full py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs"
+                        className="w-full py-2.5 krish-gradient-gold text-stone-950 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 shadow-md active:scale-98"
                       >
-                        <span>Open Table {tableNumVal} Menu</span>
+                        <span>Open Diner Menu (Table {tableNumVal})</span>
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     </div>
@@ -2338,10 +2353,10 @@ export default function AdminDashboardPage() {
 
                 {/* Preset Accounts List */}
                 <div className="space-y-2.5">
-                  {(upiAccounts.length > 0 ? upiAccounts : [
-                    { id: 'acc_1', bank: 'State Bank of India (SBI)', upi_id: 'vallipriya1212-1@oksbi', upi_name: 'Royal Spice Bistro (SBI)', daily_limit: '₹1,00,000 / day', notes: 'Primary Account (GPay / PhonePe / Paytm)' },
-                    { id: 'acc_2', bank: 'HDFC Bank', upi_id: 'royalspice.bistro@okhdfcbank', upi_name: 'Royal Spice Bistro (HDFC)', daily_limit: '₹2,00,000 / day', notes: 'Secondary Backup (Switches when SBI daily limit hits)' },
-                    { id: 'acc_3', bank: 'ICICI Bank', upi_id: 'royalspice@icici', upi_name: 'Royal Spice Bistro (ICICI)', daily_limit: '₹2,00,000 / day', notes: 'Weekend High-Volume Backup' }
+                  {(Array.isArray(upiAccounts) && upiAccounts.length > 0 ? upiAccounts : [
+                    { id: 'acc_1', bank: 'State Bank of India (SBI)', upi_id: '8760633322@oksbi', upi_name: 'KRISH Cafe & Restaurant (SBI)', daily_limit: '₹1,00,000 / day', notes: 'Primary Account (GPay / PhonePe / Paytm)' },
+                    { id: 'acc_2', bank: 'HDFC Bank', upi_id: 'krishcafe@okhdfcbank', upi_name: 'KRISH Cafe & Restaurant (HDFC)', daily_limit: '₹2,00,000 / day', notes: 'Secondary Backup (Switches when SBI daily limit hits)' },
+                    { id: 'acc_3', bank: 'ICICI Bank', upi_id: 'krishcafe@icici', upi_name: 'KRISH Cafe & Restaurant (ICICI)', daily_limit: '₹2,00,000 / day', notes: 'Weekend High-Volume Backup' }
                   ]).map((acc) => {
                     const isActive = (upiConfig.upiId || '').toLowerCase() === (acc.upi_id || '').toLowerCase();
                     return (
@@ -2431,7 +2446,7 @@ export default function AdminDashboardPage() {
                         required
                         value={upiConfig.upiName}
                         onChange={(e) => setUpiConfig({ ...upiConfig, upiName: e.target.value })}
-                        placeholder="e.g. Royal Spice Bistro"
+                        placeholder="e.g. KRISH Cafe & Restaurant"
                         className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-bold text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
                       />
                     </div>

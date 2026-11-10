@@ -2,40 +2,141 @@
 
 @layer base {
   body {
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-  }
-  
-  h1, h2, h3, .font-serif {
-    font-family: 'Playfair Display', Georgia, serif;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    background-color: #0B0B0D;
+    color: #F8FAFC;
+    overflow-x: hidden;
   }
 }
 
-/* Custom smooth scrollbar */
+.font-brush {
+  font-family: 'Permanent Marker', cursive, sans-serif;
+}
+
+.font-script {
+  font-family: 'Kaushan Script', cursive, sans-serif;
+}
+
+/* Custom smooth dark scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(11, 11, 13, 0.8);
 }
 ::-webkit-scrollbar-thumb {
-  background: #d6d3d1;
+  background: rgba(255, 196, 0, 0.25);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a29e;
+  background: rgba(255, 196, 0, 0.5);
 }
 
-/* Glassmorphism helpers */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+/* Glassmorphism System for KRISH Cafe & Restaurant */
+.krish-glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7);
 }
 
-.dark-glass-panel {
-  background: rgba(28, 25, 23, 0.9);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+.krish-glass-card {
+  background: linear-gradient(145deg, rgba(28, 24, 18, 0.75) 0%, rgba(18, 15, 12, 0.85) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6);
 }
+
+.krish-glass-gold {
+  background: linear-gradient(135deg, rgba(255, 196, 0, 0.14) 0%, rgba(255, 138, 0, 0.06) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 196, 0, 0.35);
+  box-shadow: 0 8px 24px -6px rgba(255, 196, 0, 0.2);
+}
+
+.krish-glass-red {
+  background: linear-gradient(135deg, rgba(225, 29, 46, 0.16) 0%, rgba(185, 28, 28, 0.08) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(225, 29, 46, 0.35);
+  box-shadow: 0 8px 24px -6px rgba(225, 29, 46, 0.25);
+}
+
+.krish-glass-drawer {
+  background: rgba(14, 12, 10, 0.94);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 -12px 40px -10px rgba(0, 0, 0, 0.8);
+}
+
+/* Gradients */
+.krish-gradient-gold {
+  background: linear-gradient(135deg, #FFD23F 0%, #FF8A00 100%);
+}
+
+.krish-gradient-red {
+  background: linear-gradient(135deg, #E11D2E 0%, #B91C1C 100%);
+}
+
+.krish-text-gold {
+  background: linear-gradient(135deg, #FFE873 0%, #FFC400 50%, #FF8A00 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Atmospheric culinary steam animation */
+@keyframes steamDrift {
+  0% {
+    transform: translateY(0) scale(1) translateX(0);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.15;
+  }
+  50% {
+    transform: translateY(-30px) scale(1.25) translateX(6px);
+    opacity: 0.10;
+  }
+  80% {
+    opacity: 0.04;
+  }
+  100% {
+    transform: translateY(-65px) scale(1.5) translateX(-8px);
+    opacity: 0;
+  }
+}
+
+.animate-steam-1 {
+  animation: steamDrift 6s infinite ease-out;
+}
+.animate-steam-2 {
+  animation: steamDrift 8s infinite ease-out 2.5s;
+}
+.animate-steam-3 {
+  animation: steamDrift 7s infinite ease-out 4.5s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-steam-1,
+  .animate-steam-2,
+  .animate-steam-3 {
+    animation: none !important;
+    opacity: 0.05;
+  }
+}
+
+/* Ambient glow mesh */
+.krish-ambient-glow {
+  background: 
+    radial-gradient(circle at 15% 10%, rgba(255, 196, 0, 0.10) 0%, transparent 45%),
+    radial-gradient(circle at 85% 25%, rgba(225, 29, 46, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 50% 80%, rgba(255, 138, 0, 0.06) 0%, transparent 50%),
+    #0B0B0D;
+}
+
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChefHat, Clock, AlertTriangle, CheckCircle, Flame, ArrowRight, Volume2, VolumeX, RefreshCw } from 'lucide-react';
+import { ChefHat, Clock, AlertTriangle, CheckCircle, Flame, ArrowRight, Volume2, VolumeX, RefreshCw, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import KrishLogo from '../components/KrishLogo';
 import { api } from '../api';
 import { socket } from '../socket';
 
@@ -26,7 +27,7 @@ export default function KitchenPage() {
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
       osc1.frequency.setValueAtTime(587.33, now); // D5
-      gain1.gain.setValueAtTime(0.3, now);
+      gain1.gain.setValueAtTime(0.35, now);
       gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
       osc1.connect(gain1);
       gain1.connect(ctx.destination);
@@ -37,7 +38,7 @@ export default function KitchenPage() {
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
       osc2.frequency.setValueAtTime(880.00, now + 0.15); // A5
-      gain2.gain.setValueAtTime(0.4, now + 0.15);
+      gain2.gain.setValueAtTime(0.45, now + 0.15);
       gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
       osc2.connect(gain2);
       gain2.connect(ctx.destination);
@@ -54,14 +55,15 @@ export default function KitchenPage() {
       const data = await api.getKitchenTickets(restId);
       const rawTickets = Array.isArray(data)
         ? data
-        : (data.tickets || [...(data.pending || []), ...(data.preparing || []), ...(data.ready || [])]);
-      setTickets(
-        rawTickets.map((t) => ({
-          ...t,
-          id: t.id || t.order_id,
-          order_id: t.order_id || t.id,
-        }))
-      );
+        : (Array.isArray(data?.tickets) ? data.tickets : [...(data?.pending || []), ...(data?.preparing || []), ...(data?.ready || [])]);
+      
+      const safeTickets = (Array.isArray(rawTickets) ? rawTickets : []).map((t) => ({
+        ...t,
+        id: t.id || t.order_id,
+        order_id: t.order_id || t.id,
+      }));
+
+      setTickets(safeTickets);
     } catch (err) {
       console.error('KDS load error:', err);
     } finally {
@@ -88,9 +90,9 @@ export default function KitchenPage() {
     initKDS();
   }, []);
 
-  // Real-time socket updates + fast polling fallback (for serverless environments)
+  // Real-time socket updates + fast polling fallback
   useEffect(() => {
-    function handleNewOrder(order) {
+    function handleNewOrder() {
       playKitchenChime();
       if (restaurantId) loadTickets(restaurantId);
     }
@@ -108,12 +110,12 @@ export default function KitchenPage() {
     socket.on('order:status_updated', handleOrderUpdated);
     socket.on('kitchen:ticket_advanced', handleOrderUpdated);
 
-    // Auto-refresh interval every 3 seconds (pauses when tab is hidden to save DB connections)
+    // Auto-refresh interval every 3.5 seconds
     const timer = setInterval(() => {
       if (document.hidden) return;
       const targetId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
       loadTickets(targetId);
-    }, 3000);
+    }, 3500);
 
     const handleFocus = () => {
       const targetId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
@@ -143,7 +145,7 @@ export default function KitchenPage() {
       const res = await api.advanceKitchenTicket(orderId);
       const nextStatus = res.order?.status || res.status || 'PREPARING';
       setTickets((prev) =>
-        prev.map((t) =>
+        (Array.isArray(prev) ? prev : []).map((t) =>
           t.id === orderId || t.order_id === orderId
             ? { ...t, status: nextStatus }
             : t
@@ -156,79 +158,88 @@ export default function KitchenPage() {
     }
   };
 
-  // Filter columns
-  const pendingTickets = tickets.filter((t) => t.status === 'PENDING');
-  const preparingTickets = tickets.filter((t) => t.status === 'PREPARING');
-  const readyTickets = tickets.filter((t) => t.status === 'READY');
+  // Safe filter columns
+  const ticketList = Array.isArray(tickets) ? tickets : [];
+  const pendingTickets = ticketList.filter((t) => t.status === 'PENDING');
+  const preparingTickets = ticketList.filter((t) => t.status === 'PREPARING');
+  const readyTickets = ticketList.filter((t) => t.status === 'READY');
 
   return (
-    <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#0B0B0D] text-stone-100 flex flex-col font-sans select-none">
       
       {/* KDS Header Bar */}
-      <header className="h-16 px-6 bg-stone-900 border-b border-stone-800 flex items-center justify-between shadow-lg">
+      <header className="h-16 px-4 sm:px-6 bg-[#120F0B]/95 backdrop-blur-xl border-b border-white/10 flex items-center justify-between shadow-xl sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center font-bold">
-            <ChefHat className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="font-serif font-black text-lg tracking-tight text-white flex items-center gap-2">
-              Kitchen Display System (KDS)
-              <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                LIVE
+          <KrishLogo size="sm" showHat={true} showSubtitle={false} />
+          <div className="hidden sm:block border-l border-white/15 pl-3">
+            <h1 className="font-serif font-black text-sm tracking-tight text-white flex items-center gap-2">
+              <span>Kitchen Display System</span>
+              <span className="text-[10px] uppercase font-black tracking-widest bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30 animate-pulse">
+                LIVE KDS
               </span>
             </h1>
-            <p className="text-xs text-stone-400">
-              Active Orders: {tickets.length} &bull; Royal Spice Bistro
+            <p className="text-[11px] text-stone-400">
+              Active Orders: {ticketList.length} &bull; KRISH Cafe & Restaurant
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          {/* Sound Toggle */}
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`p-2 rounded-xl border transition ${
+            className={`p-2.5 rounded-xl border transition flex items-center gap-1.5 cursor-pointer ${
               soundEnabled
-                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                : 'bg-stone-800 border-stone-700 text-stone-400'
+                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                : 'bg-stone-900 border-white/10 text-stone-500'
             }`}
-            title={soundEnabled ? 'Chime Enabled' : 'Chime Muted'}
+            title={soundEnabled ? 'Kitchen Chime ON' : 'Kitchen Chime MUTED'}
           >
-            {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            <span className="hidden md:inline text-[11px] font-bold">
+              {soundEnabled ? 'Chime ON' : 'Muted'}
+            </span>
           </button>
 
+          {/* Refresh Button */}
           <button
             onClick={() => loadTickets(restaurantId)}
-            className="p-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-xl border border-stone-700 transition"
+            className="p-2.5 bg-stone-900 hover:bg-stone-800 text-stone-300 rounded-xl border border-white/10 transition cursor-pointer"
             title="Refresh Tickets"
           >
-            <RefreshCw className="w-5 h-5" />
+            <RefreshCw className="w-4 h-4" />
           </button>
 
+          {/* Exit Link */}
           <Link
             to="/admin"
-            className="text-xs font-bold px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl border border-stone-700 transition"
+            className="text-xs font-black px-3.5 py-2.5 bg-stone-900 hover:bg-stone-800 text-stone-200 rounded-xl border border-white/15 transition flex items-center gap-1.5"
           >
-            Exit to Dashboard
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Manager Portal</span>
           </Link>
         </div>
       </header>
 
       {/* 3-Column Kanban Board */}
-      <div className="flex-1 p-6 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-hidden">
+      <div className="flex-1 p-4 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-5 overflow-hidden">
         
         {/* COLUMN 1: PENDING */}
-        <div className="flex flex-col bg-stone-900/60 rounded-3xl border border-stone-800 overflow-hidden shadow-xl">
-          <div className="px-5 py-4 border-b border-stone-800 flex items-center justify-between bg-stone-900">
+        <div className="flex flex-col bg-stone-900/60 rounded-3xl border border-amber-500/20 overflow-hidden shadow-2xl">
+          <div className="px-5 py-3.5 border-b border-amber-500/20 flex items-center justify-between bg-amber-500/10">
             <div className="flex items-center gap-2.5">
-              <span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span>
-              <h2 className="font-bold text-sm uppercase tracking-wider text-stone-200">
-                Pending ({pendingTickets.length})
+              <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping"></span>
+              <h2 className="font-black text-sm uppercase tracking-wider text-amber-300 flex items-center gap-2">
+                <span>🟡 Pending</span>
+                <span className="bg-amber-400 text-stone-950 text-xs px-2 py-0.5 rounded-full font-black">
+                  {pendingTickets.length}
+                </span>
               </h2>
             </div>
-            <span className="text-xs text-stone-500 font-semibold">New Orders</span>
+            <span className="text-[11px] text-amber-200/70 font-semibold">New Tickets</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
             {pendingTickets.length === 0 ? (
               <div className="h-48 flex items-center justify-center text-xs text-stone-500 italic">
                 No orders waiting to start
@@ -240,7 +251,7 @@ export default function KitchenPage() {
                   ticket={ticket}
                   onAdvance={() => handleAdvance(ticket)}
                   nextLabel="Start Cooking"
-                  nextColor="bg-amber-500 hover:bg-amber-400 text-stone-950"
+                  nextColor="krish-gradient-gold text-stone-950 font-black"
                 />
               ))
             )}
@@ -248,21 +259,24 @@ export default function KitchenPage() {
         </div>
 
         {/* COLUMN 2: PREPARING */}
-        <div className="flex flex-col bg-stone-900/60 rounded-3xl border border-stone-800 overflow-hidden shadow-xl">
-          <div className="px-5 py-4 border-b border-stone-800 flex items-center justify-between bg-stone-900">
+        <div className="flex flex-col bg-stone-900/60 rounded-3xl border border-sky-500/20 overflow-hidden shadow-2xl">
+          <div className="px-5 py-3.5 border-b border-sky-500/20 flex items-center justify-between bg-sky-500/10">
             <div className="flex items-center gap-2.5">
-              <span className="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></span>
-              <h2 className="font-bold text-sm uppercase tracking-wider text-stone-200">
-                Preparing ({preparingTickets.length})
+              <span className="w-3 h-3 rounded-full bg-sky-400 animate-pulse"></span>
+              <h2 className="font-black text-sm uppercase tracking-wider text-sky-300 flex items-center gap-2">
+                <span>🔥 Preparing</span>
+                <span className="bg-sky-400 text-stone-950 text-xs px-2 py-0.5 rounded-full font-black">
+                  {preparingTickets.length}
+                </span>
               </h2>
             </div>
-            <span className="text-xs text-stone-500 font-semibold">On Stove & Grill</span>
+            <span className="text-[11px] text-sky-200/70 font-semibold">On Stove & Grill</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
             {preparingTickets.length === 0 ? (
               <div className="h-48 flex items-center justify-center text-xs text-stone-500 italic">
-                Kitchen stations ready for action
+                Kitchen stations ready for cooking
               </div>
             ) : (
               preparingTickets.map((ticket) => (
@@ -271,7 +285,7 @@ export default function KitchenPage() {
                   ticket={ticket}
                   onAdvance={() => handleAdvance(ticket)}
                   nextLabel="Mark Ready"
-                  nextColor="bg-emerald-500 hover:bg-emerald-400 text-stone-950"
+                  nextColor="bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-black"
                 />
               ))
             )}
@@ -279,18 +293,21 @@ export default function KitchenPage() {
         </div>
 
         {/* COLUMN 3: READY */}
-        <div className="flex flex-col bg-stone-900/60 rounded-3xl border border-stone-800 overflow-hidden shadow-xl">
-          <div className="px-5 py-4 border-b border-stone-800 flex items-center justify-between bg-stone-900">
+        <div className="flex flex-col bg-stone-900/60 rounded-3xl border border-emerald-500/20 overflow-hidden shadow-2xl">
+          <div className="px-5 py-3.5 border-b border-emerald-500/20 flex items-center justify-between bg-emerald-500/10">
             <div className="flex items-center gap-2.5">
-              <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-              <h2 className="font-bold text-sm uppercase tracking-wider text-stone-200">
-                Ready ({readyTickets.length})
+              <span className="w-3 h-3 rounded-full bg-emerald-400"></span>
+              <h2 className="font-black text-sm uppercase tracking-wider text-emerald-300 flex items-center gap-2">
+                <span>✅ Ready</span>
+                <span className="bg-emerald-400 text-stone-950 text-xs px-2 py-0.5 rounded-full font-black">
+                  {readyTickets.length}
+                </span>
               </h2>
             </div>
-            <span className="text-xs text-stone-500 font-semibold">Ready for Table Runner</span>
+            <span className="text-[11px] text-emerald-200/70 font-semibold">Ready for Table Runner</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
             {readyTickets.length === 0 ? (
               <div className="h-48 flex items-center justify-center text-xs text-stone-500 italic">
                 No orders waiting for pickup
@@ -302,7 +319,7 @@ export default function KitchenPage() {
                   ticket={ticket}
                   onAdvance={() => handleAdvance(ticket)}
                   nextLabel="Mark Served"
-                  nextColor="bg-sky-400 hover:bg-sky-300 text-stone-950"
+                  nextColor="bg-sky-400 hover:bg-sky-300 text-stone-950 font-black"
                 />
               ))
             )}
@@ -322,47 +339,47 @@ function KDSTicketCard({ ticket, onAdvance, nextLabel, nextColor, isCompleted })
   const getUrgencyBadge = () => {
     if (elapsedMinutes >= 20) {
       return (
-        <span className="bg-rose-500/20 text-rose-400 border border-rose-500/40 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 animate-pulse">
-          <AlertTriangle className="w-3 h-3" /> {elapsedMinutes}m (DELAYED)
+        <span className="bg-rose-500/20 text-rose-300 border border-rose-500/50 text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1 animate-pulse">
+          <AlertTriangle className="w-3 h-3 text-rose-400" /> {elapsedMinutes}m (DELAYED)
         </span>
       );
     }
     if (elapsedMinutes >= 10) {
       return (
-        <span className="bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
-          <Clock className="w-3 h-3" /> {elapsedMinutes}m
+        <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1">
+          <Clock className="w-3 h-3 text-amber-400" /> {elapsedMinutes}m
         </span>
       );
     }
     return (
-      <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
-        <Clock className="w-3 h-3" /> {elapsedMinutes}m
+      <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1">
+        <Clock className="w-3 h-3 text-emerald-400" /> {elapsedMinutes}m
       </span>
     );
   };
 
   return (
-    <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 shadow-lg transition-all hover:border-stone-700 flex flex-col justify-between">
+    <div className="krish-glass-card rounded-2xl p-4 transition-all hover:border-amber-400/40 flex flex-col justify-between">
       <div>
         {/* Ticket Top Meta */}
-        <div className="flex items-center justify-between pb-3 border-b border-stone-800">
+        <div className="flex items-center justify-between pb-3 border-b border-white/10">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <span className="text-base font-black text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-xl border border-amber-400/20">
+              <span className="text-base font-black text-amber-300 bg-amber-400/15 px-2.5 py-1 rounded-xl border border-amber-400/30">
                 Table #{ticket.table_number || ticket.tableNumber || '1'}
               </span>
-              <span className="text-xs text-stone-400 font-mono">
-                #{ticket.id?.slice(0, 6)}
+              <span className="text-xs text-stone-500 font-mono">
+                #{String(ticket.id || '').slice(0, 6)}
               </span>
             </div>
             {/* Customer Session Identifier */}
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-xs font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-lg border border-sky-500/20">
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <span className="text-[11px] font-bold text-sky-300 bg-sky-500/15 px-2 py-0.5 rounded-md border border-sky-500/25">
                 {ticket.session_label || ticket.sessionLabel || 'Customer'}
                 {ticket.customer_name ? ` (${ticket.customer_name})` : ''}
               </span>
               <span className="text-[10px] text-stone-500 font-mono">
-                {createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                {createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           </div>
@@ -382,15 +399,15 @@ function KDSTicketCard({ ticket, onAdvance, nextLabel, nextColor, isCompleted })
           {(ticket.items || []).map((item, idx) => (
             <div
               key={idx}
-              className="flex items-center justify-between text-xs py-1 border-b border-stone-800/50 last:border-0"
+              className="flex items-center justify-between text-xs py-1 border-b border-white/5 last:border-0"
             >
               <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-lg bg-stone-800 text-stone-200 font-black flex items-center justify-center text-xs">
+                <span className="w-6 h-6 rounded-lg bg-stone-800 text-amber-400 font-black flex items-center justify-center text-xs border border-white/10">
                   {item.quantity}x
                 </span>
                 <span className="font-bold text-stone-100 text-sm">{item.name || item.item_name}</span>
               </div>
-              <span className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">
+              <span className="text-[10px] text-stone-400 uppercase tracking-wider font-semibold">
                 {item.category || 'Kitchen'}
               </span>
             </div>
@@ -402,7 +419,7 @@ function KDSTicketCard({ ticket, onAdvance, nextLabel, nextColor, isCompleted })
       {!isCompleted && onAdvance && (
         <button
           onClick={onAdvance}
-          className={`w-full mt-3 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition active:scale-95 shadow-md cursor-pointer ${nextColor}`}
+          className={`w-full mt-3 py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition active:scale-95 shadow-md cursor-pointer ${nextColor}`}
         >
           <span>{nextLabel}</span>
           <ArrowRight className="w-4 h-4" />
@@ -410,7 +427,7 @@ function KDSTicketCard({ ticket, onAdvance, nextLabel, nextColor, isCompleted })
       )}
 
       {isCompleted && (
-        <div className="mt-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-center text-xs font-bold flex items-center justify-center gap-1.5">
+        <div className="mt-3 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-center text-xs font-bold flex items-center justify-center gap-1.5">
           <CheckCircle className="w-4 h-4" />
           <span>Plated & Alerted to Waiter</span>
         </div>
@@ -418,4 +435,3 @@ function KDSTicketCard({ ticket, onAdvance, nextLabel, nextColor, isCompleted })
     </div>
   );
 }
-

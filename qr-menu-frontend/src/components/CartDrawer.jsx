@@ -259,21 +259,22 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
       />
 
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col justify-between">
+        <div className="w-screen max-w-md bg-[#0E0C0A] border-l border-white/10 shadow-2xl flex flex-col justify-between text-stone-100">
           
           {/* Header */}
-          <div className="px-5 py-4 border-b border-stone-200 flex items-center justify-between bg-stone-50/80">
+          <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between bg-[#15120E]/90 backdrop-blur-md">
             <div>
-              <h2 className="font-serif font-bold text-lg text-stone-900 leading-tight">
-                {hasActiveSession ? 'Table Bill & Order Summary' : 'Your Table Cart'}
+              <h2 className="font-bold text-lg text-white leading-tight flex items-center gap-2">
+                <span>{hasActiveSession ? 'Table Bill & Order Summary' : 'Your Table Cart'}</span>
               </h2>
-              <p className="text-xs text-stone-500">
-                Table #{tableNumber || '1'} &bull; Royal Spice Bistro
+              <p className="text-xs text-amber-300/80 font-medium mt-0.5">
+                Table #{tableNumber || '1'} &bull; KRISH Cafe &amp; Restaurant
               </p>
             </div>
             <button
+              type="button"
               onClick={onClose}
-              className="p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-full transition cursor-pointer"
+              className="p-2 text-stone-400 hover:text-white hover:bg-white/10 rounded-full transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -284,23 +285,23 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
             
             {/* Active Table Order Bill Section */}
             {hasActiveSession && activeOrder && (
-              <div className="bg-stone-50 rounded-2xl border border-stone-200 p-4 space-y-3 shadow-xs">
-                <div className="flex items-center justify-between pb-2 border-b border-stone-200">
+              <div className="krish-glass-card rounded-2xl border border-white/15 p-4 space-y-3 shadow-lg">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
                   <div className="flex items-center gap-2">
-                    <Receipt className="w-4 h-4 text-emerald-700" />
-                    <span className="font-serif font-black text-stone-900 text-sm">
+                    <Receipt className="w-4 h-4 text-emerald-400" />
+                    <span className="font-black text-white text-sm">
                       Current Active Bill #{activeOrder.id?.slice(0, 8)}
                     </span>
                   </div>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                       activeOrder.status === 'PENDING'
-                        ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                         : activeOrder.status === 'PREPARING'
-                        ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
                         : activeOrder.status === 'READY'
-                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                        : 'bg-purple-100 text-purple-900 border border-purple-300'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
                     }`}
                   >
                     {activeOrder.status === 'PENDING' ? 'Forwarded to Kitchen' : activeOrder.status}
@@ -311,13 +312,13 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                 <div
                   className={`p-3 rounded-xl text-xs flex items-center justify-between gap-2 ${
                     isOrderEditable
-                      ? 'bg-emerald-50 text-emerald-950 border border-emerald-200'
-                      : 'bg-stone-100 text-stone-600 border border-stone-200'
+                      ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-stone-900 text-stone-400 border border-white/10'
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     {isOrderEditable ? (
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
                     ) : (
                       <Lock className="w-4 h-4 text-stone-500 shrink-0" />
                     )}
@@ -332,7 +333,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                 {/* Dishes currently placed on this bill */}
                 <div className="space-y-2 pt-1">
                   <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300/80">
                       Dishes on Your Active Bill ({activeOrder.items?.length || 0})
                     </p>
                     <span className="text-[10px] text-stone-400 font-medium">
@@ -353,44 +354,45 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                     return (
                       <div
                         key={it.id}
-                        className="flex items-center justify-between text-xs py-2 border-b border-stone-200/60 last:border-0"
+                        className="flex items-center justify-between text-xs py-2 border-b border-white/5 last:border-0"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-black text-stone-900 bg-stone-200 px-2 py-0.5 rounded-md text-xs shrink-0">
+                          <span className="font-black text-amber-300 bg-white/10 px-2 py-0.5 rounded-md text-xs shrink-0 font-mono">
                             {it.quantity}x
                           </span>
-                          <div className={`w-3 h-3 border flex items-center justify-center shrink-0 rounded-2xs ${itIsVeg ? 'border-emerald-600' : 'border-rose-600'}`}>
-                            <div className={`w-1 h-1 rounded-full ${itIsVeg ? 'bg-emerald-600' : 'bg-rose-600'}`}></div>
+                          <div className={`w-3 h-3 border flex items-center justify-center shrink-0 rounded-2xs ${itIsVeg ? 'border-emerald-500' : 'border-rose-500'}`}>
+                            <div className={`w-1 h-1 rounded-full ${itIsVeg ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
                           </div>
                           <div className="min-w-0">
-                            <span className="font-bold text-stone-900 text-xs block truncate">{itemName}</span>
-                            <span className="text-[10px] text-stone-500">₹{parseFloat(it.price_at_order || 0).toFixed(2)} each</span>
+                            <span className="font-bold text-white text-xs block truncate">{itemName}</span>
+                            <span className="text-[10px] text-stone-400 font-mono">₹{parseFloat(it.price_at_order || 0).toFixed(2)} each</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          <span className="font-black text-stone-900 text-xs">
+                          <span className="font-black text-amber-400 text-xs font-mono">
                             ₹{parseFloat(it.line_total || it.price_at_order * it.quantity || 0).toFixed(2)}
                           </span>
                           {it.status === 'SERVED' ? (
-                            <span className="text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-2xs">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span className="text-[10px] text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-2xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                               <span>Served</span>
                             </span>
                           ) : it.status === 'READY' ? (
-                            <span className="text-[10px] text-sky-800 bg-sky-50 border border-sky-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-2xs">
-                              <Sparkles className="w-3 h-3 text-sky-600" />
+                            <span className="text-[10px] text-sky-300 bg-sky-500/20 border border-sky-500/40 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-2xs">
+                              <Sparkles className="w-3 h-3 text-sky-400" />
                               <span>Ready</span>
                             </span>
                           ) : it.status === 'PREPARING' ? (
-                            <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-2xs">
-                              <Lock className="w-3 h-3 text-amber-600" />
+                            <span className="text-[10px] text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-2xs">
+                              <Lock className="w-3 h-3 text-amber-400" />
                               <span>Cooking</span>
                             </span>
                           ) : (
                             <button
+                              type="button"
                               disabled={isRemovingItem}
                               onClick={() => handleRemoveActiveItem(it.id)}
-                              className="px-2 py-1 text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-rose-600 rounded-lg transition flex items-center gap-1 text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                              className="px-2 py-1 text-rose-400 hover:text-white hover:bg-rose-600 border border-rose-500/30 hover:border-rose-600 rounded-lg transition flex items-center gap-1 text-[11px] font-bold cursor-pointer disabled:opacity-50"
                               title="Cancel / Remove dish"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -404,28 +406,28 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                 </div>
 
                 {/* Bill Math Breakdown */}
-                <div className="pt-2 border-t border-stone-200 space-y-1 text-xs">
-                  <div className="flex justify-between text-stone-500">
+                <div className="pt-2 border-t border-white/10 space-y-1 text-xs font-mono">
+                  <div className="flex justify-between text-stone-400">
                     <span>Placed Items Subtotal</span>
                     <span>₹{parseFloat(activeOrder.subtotal || 0).toFixed(2)}</span>
                   </div>
                   {(activeDietaryStats.vegCount > 0 || activeDietaryStats.nonVegCount > 0) && (
-                    <div className="flex justify-between text-stone-500 text-[11px]">
+                    <div className="flex justify-between text-stone-400 text-[11px]">
                       <span>Dietary Split</span>
-                      <span className="font-semibold text-stone-700">
+                      <span className="font-semibold text-stone-300">
                         {activeDietaryStats.vegCount > 0 ? `${activeDietaryStats.vegCount} Veg (₹${activeDietaryStats.vegTotal.toFixed(0)})` : ''}
                         {activeDietaryStats.vegCount > 0 && activeDietaryStats.nonVegCount > 0 ? ' • ' : ''}
                         {activeDietaryStats.nonVegCount > 0 ? `${activeDietaryStats.nonVegCount} Non-Veg (₹${activeDietaryStats.nonVegTotal.toFixed(0)})` : ''}
                       </span>
                     </div>
                   )}
-                  <div className="flex justify-between text-stone-500">
+                  <div className="flex justify-between text-stone-400">
                     <span>GST (5%)</span>
                     <span>₹{parseFloat(activeOrder.taxAmount || 0).toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between font-black text-stone-950 text-sm pt-1 border-t border-stone-200/60">
+                  <div className="flex justify-between font-black text-white text-sm pt-1 border-t border-white/10">
                     <span>Current Active Bill</span>
-                    <span className="text-emerald-700">
+                    <span className="text-emerald-400">
                       ₹{parseFloat(activeOrder.total || activeOrder.total_amount || 0).toFixed(2)}
                     </span>
                   </div>
@@ -434,6 +436,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                 {/* Instant UPI Payment Button */}
                 {onOpenUpiModal && (
                   <button
+                    type="button"
                     onClick={() => {
                       onClose();
                       onOpenUpiModal({
@@ -442,7 +445,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                         tableNumber
                       });
                     }}
-                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer mt-1"
+                    className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-110 active:scale-98 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition shadow-[0_4px_16px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2 cursor-pointer mt-1"
                   >
                     <Smartphone className="w-4 h-4" />
                     <span>Pay Bill via UPI (Dynamic QR / Apps)</span>
@@ -468,13 +471,13 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
               </div>
 
               {itemsList.length === 0 ? (
-                <div className="py-6 px-4 text-center bg-stone-50 rounded-2xl border border-dashed border-stone-200">
-                  <p className="text-xs font-semibold text-stone-700">
+                <div className="py-6 px-4 text-center bg-stone-900/60 rounded-2xl border border-dashed border-white/10">
+                  <p className="text-xs font-semibold text-stone-300">
                     {hasActiveSession ? 'Want to add extra items to your table?' : 'Your cart is empty'}
                   </p>
                   <p className="text-[11px] text-stone-400 mt-1">
                     {hasActiveSession
-                      ? 'Browse the menu and tap "+ Add" on any bread, curry or beverage to add it to your table bill.'
+                      ? 'Browse the menu and tap "+ Add" on any mojito, briyani or fries to add it to your table bill.'
                       : 'Tap "+ Add" on any dish from the menu to start.'}
                   </p>
                 </div>
@@ -493,40 +496,42 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                     return (
                       <div
                         key={item.id}
-                        className="flex items-center justify-between p-3 rounded-xl bg-stone-50 border border-stone-200/60"
+                        className="flex items-center justify-between p-3 rounded-xl bg-stone-900/80 border border-white/10"
                       >
                         <div className="flex-1 pr-3 min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <div className={`w-3 h-3 border flex items-center justify-center shrink-0 rounded-2xs ${itemIsVeg ? 'border-emerald-600' : 'border-rose-600'}`}>
-                              <div className={`w-1 h-1 rounded-full ${itemIsVeg ? 'bg-emerald-600' : 'bg-rose-600'}`}></div>
+                            <div className={`w-3 h-3 border flex items-center justify-center shrink-0 rounded-2xs ${itemIsVeg ? 'border-emerald-500' : 'border-rose-500'}`}>
+                              <div className={`w-1 h-1 rounded-full ${itemIsVeg ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
                             </div>
-                            <p className="font-bold text-stone-900 text-sm leading-tight truncate">{item.name}</p>
+                            <p className="font-bold text-white text-sm leading-tight truncate">{item.name}</p>
                           </div>
-                          <p className="text-xs text-stone-500 mt-1 pl-4.5">
-                            ₹{parseFloat(item.price).toFixed(2)} each &bull; <span className={itemIsVeg ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>{itemIsVeg ? 'Veg' : 'Non-Veg'}</span>
+                          <p className="text-xs text-stone-400 mt-1 pl-4.5 font-mono">
+                            ₹{parseFloat(item.price).toFixed(2)} each &bull; <span className={itemIsVeg ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>{itemIsVeg ? 'Veg' : 'Non-Veg'}</span>
                           </p>
                         </div>
 
                         <div className="flex items-center gap-3 shrink-0">
-                          <div className="inline-flex items-center bg-white rounded-lg border border-stone-200 shadow-2xs">
+                          <div className="inline-flex items-center bg-stone-950 rounded-lg border border-white/15 shadow-2xs">
                             <button
+                              type="button"
                               onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                              className="w-7 h-7 flex items-center justify-center text-stone-700 hover:bg-stone-100"
+                              className="w-7 h-7 flex items-center justify-center text-stone-300 hover:text-white hover:bg-stone-800 rounded-l-lg transition"
                             >
                               <Minus className="w-3 h-3" />
                             </button>
-                            <span className="w-6 text-center text-xs font-bold text-stone-900">
+                            <span className="w-6 text-center text-xs font-bold text-amber-300 font-mono">
                               {item.quantity}
                             </span>
                             <button
+                              type="button"
                               onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                              className="w-7 h-7 flex items-center justify-center text-stone-700 hover:bg-stone-100"
+                              className="w-7 h-7 flex items-center justify-center text-stone-300 hover:text-white hover:bg-stone-800 rounded-r-lg transition"
                             >
                               <Plus className="w-3 h-3" />
                             </button>
                           </div>
 
-                          <span className="font-bold text-sm text-stone-900 w-16 text-right">
+                          <span className="font-black text-sm text-amber-400 w-16 text-right font-mono">
                             ₹{(parseFloat(item.price) * item.quantity).toFixed(2)}
                           </span>
                         </div>
@@ -536,9 +541,9 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
 
                   {/* Dietary Calculation Summary Box */}
                   {itemsList.length > 0 && (
-                    <div className="p-3 bg-white rounded-2xl border border-stone-200/90 shadow-2xs space-y-2.5">
+                    <div className="p-3 bg-stone-900/90 rounded-2xl border border-white/10 shadow-2xs space-y-2.5">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-stone-800 uppercase tracking-wider text-[11px]">
+                        <span className="font-bold text-stone-200 uppercase tracking-wider text-[11px]">
                           Dietary Breakdown & Calculation
                         </span>
                         <span className="text-[10px] text-stone-400 font-semibold">
@@ -548,33 +553,33 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
 
                       <div className="grid grid-cols-2 gap-2">
                         {/* Veg Calculation Card */}
-                        <div className="p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200">
+                        <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
                           <div className="flex items-center gap-1.5 mb-1">
-                            <div className="w-3 h-3 border border-emerald-600 flex items-center justify-center rounded-2xs">
-                              <div className="w-1 h-1 rounded-full bg-emerald-600"></div>
+                            <div className="w-3 h-3 border border-emerald-500 flex items-center justify-center rounded-2xs">
+                              <div className="w-1 h-1 rounded-full bg-emerald-500"></div>
                             </div>
-                            <span className="text-xs font-bold text-emerald-950">Pure Veg</span>
+                            <span className="text-xs font-bold text-emerald-300">Pure Veg</span>
                           </div>
-                          <p className="text-base font-black text-emerald-900">
+                          <p className="text-base font-black text-emerald-400 font-mono">
                             ₹{(dietaryStats?.vegSubtotal || 0).toFixed(2)}
                           </p>
-                          <p className="text-[10px] text-emerald-700 font-medium">
+                          <p className="text-[10px] text-emerald-400/80 font-medium">
                             {dietaryStats?.vegCount || 0} {dietaryStats?.vegCount === 1 ? 'portion' : 'portions'}
                           </p>
                         </div>
 
                         {/* Non-Veg Calculation Card */}
-                        <div className="p-2.5 rounded-xl bg-rose-50/80 border border-rose-200">
+                        <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30">
                           <div className="flex items-center gap-1.5 mb-1">
-                            <div className="w-3 h-3 border border-rose-600 flex items-center justify-center rounded-2xs">
-                              <div className="w-1 h-1 rounded-full bg-rose-600"></div>
+                            <div className="w-3 h-3 border border-rose-500 flex items-center justify-center rounded-2xs">
+                              <div className="w-1 h-1 rounded-full bg-rose-500"></div>
                             </div>
-                            <span className="text-xs font-bold text-rose-950">Non-Veg</span>
+                            <span className="text-xs font-bold text-rose-300">Non-Veg</span>
                           </div>
-                          <p className="text-base font-black text-rose-900">
+                          <p className="text-base font-black text-rose-400 font-mono">
                             ₹{(dietaryStats?.nonVegSubtotal || 0).toFixed(2)}
                           </p>
-                          <p className="text-[10px] text-rose-700 font-medium">
+                          <p className="text-[10px] text-rose-400/80 font-medium">
                             {dietaryStats?.nonVegCount || 0} {dietaryStats?.nonVegCount === 1 ? 'portion' : 'portions'}
                           </p>
                         </div>
@@ -587,7 +592,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
 
             {/* Special Instructions */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-stone-400 mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-amber-300/80 mb-1.5">
                 Cooking Notes for Chef
               </label>
               <textarea
@@ -595,14 +600,14 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                 onChange={(e) => setCookingNotes(e.target.value)}
                 placeholder="E.g. Less spicy, keep sauce on the side, allergies..."
                 rows={2}
-                className="w-full text-xs p-3 rounded-xl border border-stone-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                className="w-full text-xs p-3 rounded-xl border border-white/15 bg-stone-900/90 text-white placeholder-stone-500 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none"
               />
             </div>
 
             {/* Diner Info & GDPR for New Sessions */}
             {!hasActiveSession && (
-              <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200/60 space-y-3">
-                <p className="text-xs font-bold text-amber-950 uppercase tracking-wider">
+              <div className="p-4 rounded-xl krish-glass-gold space-y-3">
+                <p className="text-xs font-bold text-amber-300 uppercase tracking-wider">
                   Diner Details
                 </p>
                 <div className="grid grid-cols-2 gap-2">
@@ -612,7 +617,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                       placeholder="Your Name"
                       value={nameInput}
                       onChange={(e) => setNameInput(e.target.value)}
-                      className="w-full text-xs p-2.5 rounded-lg border border-stone-200 bg-white outline-none focus:border-amber-500"
+                      className="w-full text-xs p-2.5 rounded-lg border border-white/15 bg-stone-900 text-white placeholder-stone-500 outline-none focus:border-amber-400"
                     />
                   </div>
                   <div>
@@ -621,18 +626,18 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                       placeholder="Mobile Phone"
                       value={phoneInput}
                       onChange={(e) => setPhoneInput(e.target.value)}
-                      className="w-full text-xs p-2.5 rounded-lg border border-stone-200 bg-white outline-none focus:border-amber-500"
+                      className="w-full text-xs p-2.5 rounded-lg border border-white/15 bg-stone-900 text-white placeholder-stone-500 outline-none focus:border-amber-400"
                     />
                   </div>
                 </div>
 
                 {/* GDPR Consent */}
-                <label className="flex items-start gap-2 text-[11px] text-stone-600 cursor-pointer pt-1">
+                <label className="flex items-start gap-2 text-[11px] text-stone-300 cursor-pointer pt-1">
                   <input
                     type="checkbox"
                     checked={consentCheck}
                     onChange={(e) => setConsentCheck(e.target.checked)}
-                    className="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
+                    className="mt-0.5 rounded text-amber-500 focus:ring-amber-400"
                   />
                   <span>
                     I consent to storing my phone number for table order updates & receipt (GDPR compliant).
@@ -651,36 +656,37 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                     placeholder="Enter Coupon (e.g. FESTIVE10)"
                     value={couponCode}
                     onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-stone-200 uppercase font-semibold focus:border-amber-500 outline-none"
+                    className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-white/15 bg-stone-900 text-white placeholder-stone-500 uppercase font-semibold focus:border-amber-400 outline-none"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-xl transition"
+                  className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-white text-xs font-bold rounded-xl transition border border-white/10"
                 >
                   Apply
                 </button>
               </form>
-              {couponError && <p className="text-[11px] text-rose-600 mt-1">{couponError}</p>}
-              {couponSuccess && <p className="text-[11px] text-emerald-600 mt-1 font-semibold">{couponSuccess}</p>}
+              {couponError && <p className="text-[11px] text-rose-400 mt-1">{couponError}</p>}
+              {couponSuccess && <p className="text-[11px] text-emerald-400 mt-1 font-semibold">{couponSuccess}</p>}
             </div>
 
             {/* Smart Bill Splitting Preview */}
-            <div className="pt-2 border-t border-stone-200">
+            <div className="pt-2 border-t border-white/10">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-amber-600" />
+                <span className="text-xs font-bold text-stone-300 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-amber-400" />
                   Split Bill Calculator
                 </span>
                 <div className="flex gap-1">
-                  {[2, 3, 4].map((n) => (
+                  {[2, 3, 4, 5].map((n) => (
                     <button
                       key={n}
+                      type="button"
                       onClick={() => handleCalculateSplit(n)}
                       className={`text-[11px] font-bold px-2 py-0.5 rounded-md transition ${
                         splitWays === n
-                          ? 'bg-amber-600 text-white'
-                          : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                          ? 'krish-gradient-gold text-stone-950 font-black'
+                          : 'bg-stone-900 text-stone-400 hover:text-white border border-white/10'
                       }`}
                     >
                       {n} Ways
@@ -689,9 +695,9 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                 </div>
               </div>
               {splitResult && (
-                <div className="bg-stone-50 rounded-lg p-2.5 text-xs flex justify-between items-center border border-stone-200">
-                  <span className="text-stone-600">Per person share ({splitWays} diners):</span>
-                  <span className="font-bold text-stone-900 text-sm">
+                <div className="bg-stone-900/90 rounded-lg p-2.5 text-xs flex justify-between items-center border border-white/10 font-mono">
+                  <span className="text-stone-400 font-sans">Per person share ({splitWays} diners):</span>
+                  <span className="font-black text-amber-400 text-sm">
                     ₹{splitResult.perPersonShare} each
                   </span>
                 </div>
@@ -700,55 +706,55 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
 
             {/* Error message */}
             {errorMsg && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-xs text-rose-700">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-2 text-xs text-rose-300">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
                 <span>{errorMsg}</span>
               </div>
             )}
           </div>
 
           {/* Footer & Checkout */}
-          <div className="p-5 border-t border-stone-200 bg-stone-50 space-y-3">
+          <div className="p-5 border-t border-white/10 bg-[#15120E]/95 backdrop-blur-md space-y-3 font-mono">
             {/* Price Breakdown */}
             {hasActiveSession && itemsList.length === 0 ? (
-              <div className="space-y-1.5 text-xs text-stone-600">
+              <div className="space-y-1.5 text-xs text-stone-400">
                 <div className="flex justify-between">
                   <span>Current Placed Subtotal</span>
-                  <span className="font-semibold text-stone-900">
+                  <span className="font-semibold text-white">
                     ₹{parseFloat(activeOrder?.subtotal || 0).toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>5% GST Tax</span>
-                  <span className="font-semibold text-stone-900">
+                  <span className="font-semibold text-white">
                     ₹{parseFloat(activeOrder?.taxAmount || 0).toFixed(2)}
                   </span>
                 </div>
-                <div className="flex justify-between text-base font-black text-stone-950 pt-2 border-t border-stone-200">
+                <div className="flex justify-between text-base font-black text-white pt-2 border-t border-white/10 font-mono">
                   <span>Current Active Bill Total</span>
-                  <span className="text-emerald-700">
+                  <span className="text-emerald-400">
                     ₹{parseFloat(activeOrder?.total || activeOrder?.total_amount || 0).toFixed(2)}
                   </span>
                 </div>
               </div>
             ) : (
-              <div className="space-y-1.5 text-xs text-stone-600">
+              <div className="space-y-1.5 text-xs text-stone-400">
                 {hasActiveSession && activeOrder && (
-                  <div className="flex justify-between text-stone-500 pb-1 border-b border-stone-200/50">
+                  <div className="flex justify-between text-stone-500 pb-1 border-b border-white/5">
                     <span>Already Placed Bill</span>
-                    <span className="font-medium text-stone-800">
+                    <span className="font-medium text-stone-300 font-mono">
                       ₹{parseFloat(activeOrder.total || 0).toFixed(2)}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <span>{hasActiveSession ? 'New Additions Subtotal' : 'Food Subtotal'}</span>
-                  <span className="font-semibold text-stone-900">₹{subtotal.toFixed(2)}</span>
+                  <span className="font-semibold text-white font-mono">₹{subtotal.toFixed(2)}</span>
                 </div>
                 {(dietaryStats?.vegCount > 0 || dietaryStats?.nonVegCount > 0) && (
                   <div className="flex justify-between text-[11px] text-stone-500">
                     <span>Dietary Calculation</span>
-                    <span className="font-medium text-stone-700">
+                    <span className="font-medium text-stone-300">
                       {dietaryStats.vegCount > 0 ? `${dietaryStats.vegCount} Veg (₹${dietaryStats.vegSubtotal.toFixed(0)})` : ''}
                       {dietaryStats.vegCount > 0 && dietaryStats.nonVegCount > 0 ? ' • ' : ''}
                       {dietaryStats.nonVegCount > 0 ? `${dietaryStats.nonVegCount} Non-Veg (₹${dietaryStats.nonVegTotal.toFixed(0)})` : ''}
@@ -756,18 +762,18 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                   </div>
                 )}
                 {discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-600 font-semibold">
+                  <div className="flex justify-between text-emerald-400 font-semibold font-mono">
                     <span>Coupon Discount</span>
                     <span>-₹{discountAmount.toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <span>GST Tax (5%)</span>
-                  <span className="font-semibold text-stone-900">₹{taxAmount.toFixed(2)}</span>
+                  <span className="font-semibold text-white font-mono">₹{taxAmount.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-base font-black text-stone-950 pt-2 border-t border-stone-200">
+                <div className="flex justify-between text-base font-black text-white pt-2 border-t border-white/10 font-mono">
                   <span>{hasActiveSession ? 'Combined Table Total' : 'Grand Total'}</span>
-                  <span className="text-emerald-700">
+                  <span className="text-emerald-400">
                     ₹{(hasActiveSession && activeOrder ? parseFloat(activeOrder.total || 0) + grandTotal : grandTotal).toFixed(2)}
                   </span>
                 </div>
@@ -779,6 +785,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
               <div className="space-y-2">
                 {onOpenUpiModal && (
                   <button
+                    type="button"
                     onClick={() => {
                       onClose();
                       onOpenUpiModal({
@@ -787,30 +794,32 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                         tableNumber
                       });
                     }}
-                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-black text-xs uppercase tracking-wider rounded-xl transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-110 active:scale-98 text-white font-black text-xs uppercase tracking-wider rounded-xl transition shadow-[0_4px_16px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Smartphone className="w-4 h-4" />
                     <span>⚡ Pay Bill via Dynamic UPI (QR & Apps)</span>
                   </button>
                 )}
                 <button
+                  type="button"
                   onClick={onClose}
-                  className="w-full py-3 bg-stone-900 hover:bg-stone-800 text-white font-black text-xs uppercase tracking-wider rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-3 bg-stone-900 hover:bg-stone-800 text-white font-black text-xs uppercase tracking-wider rounded-xl transition border border-white/10 flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>+ Browse Menu to Add More Dishes</span>
                 </button>
               </div>
             ) : (
               <button
+                type="button"
                 disabled={isSubmitting || itemsList.length === 0}
                 onClick={handlePlaceOrder}
-                className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 disabled:bg-stone-300 disabled:cursor-not-allowed text-stone-950 font-black text-sm rounded-xl transition-all shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                className="w-full py-3.5 krish-gradient-gold hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed text-stone-950 font-black text-sm rounded-xl transition-all shadow-[0_4px_20px_rgba(255,196,0,0.4)] flex items-center justify-center gap-2 cursor-pointer active:scale-98"
               >
                 {isSubmitting ? (
                   <span>Sending to Kitchen...</span>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4" />
+                    <Sparkles className="w-4 h-4 stroke-[2.5]" />
                     <span>
                       {hasActiveSession
                         ? `Add ${itemsList.length} Item${itemsList.length > 1 ? 's' : ''} to Table Order`

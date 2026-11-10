@@ -51,12 +51,12 @@ export default function UpiPaymentModal({
   orderId,
   sessionToken,
   customerName = '',
-  upiId: propUpiId = 'vallipriya1212-1@oksbi',
-  upiName: propUpiName = 'Royal Spice Bistro',
+  upiId: propUpiId = '8760633322@oksbi',
+  upiName: propUpiName = 'KRISH Cafe & Restaurant',
   onPaymentSuccess
 }) {
-  const [upiId, setUpiId] = useState(propUpiId || 'vallipriya1212-1@oksbi');
-  const [upiName, setUpiName] = useState(propUpiName || 'Royal Spice Bistro');
+  const [upiId, setUpiId] = useState(propUpiId || '8760633322@oksbi');
+  const [upiName, setUpiName] = useState(propUpiName || 'KRISH Cafe & Restaurant');
   const [copied, setCopied] = useState(false);
   const [utrNumber, setUtrNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
