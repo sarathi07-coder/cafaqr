@@ -6,13 +6,25 @@
 
 ## 🌐 1. Live Production Deployment Links
 
-| Portal | Live Production URL | Description | Test Credentials |
+### ☁️ Cloudflare 100% Native Production Stack (Fastest & Edge V8)
+
+| Portal | Live Cloudflare URL | Description | Test Credentials |
 | :--- | :--- | :--- | :--- |
-| 📱 **Customer QR Menu** | [https://cafaqr-h5b1.vercel.app/order?tableNumber=1](https://cafaqr-h5b1.vercel.app/order?tableNumber=1) | Diner mobile ordering interface | Open on phone or browser |
-| 👨‍🍳 **Kitchen Display (KDS)** | [https://cafaqr-h5b1.vercel.app/kitchen](https://cafaqr-h5b1.vercel.app/kitchen) | Live 3-column chef Kanban board | Live audio alerts enabled |
-| 📊 **Admin & Cashier Portal** | [https://cafaqr-h5b1.vercel.app/admin](https://cafaqr-h5b1.vercel.app/admin) | Table oversight, billing, analytics | **User:** `admin`<br>**Pass:** `supersecret` or `admin123` |
+| 📱 **Customer QR Menu** | [https://cafaqr.p7404467.workers.dev/order?tableNumber=1](https://cafaqr.p7404467.workers.dev/order?tableNumber=1) | Diner mobile ordering interface | Open on phone or browser |
+| 👨‍🍳 **Kitchen Display (KDS)** | [https://cafaqr.p7404467.workers.dev/kitchen](https://cafaqr.p7404467.workers.dev/kitchen) | Live 3-column chef Kanban board | Live audio alerts enabled |
+| 📊 **Admin & Cashier Portal** | [https://cafaqr.p7404467.workers.dev/admin](https://cafaqr.p7404467.workers.dev/admin) | Table oversight, billing, analytics | **User:** `admin`<br>**Pass:** `supersecret` or `admin123` |
 | ⚡ **Cloudflare Worker & D1 API** | [https://cafaqr-api.p7404467.workers.dev/health/db](https://cafaqr-api.p7404467.workers.dev/health/db) | Cloudflare Edge & D1 diagnostic | Status: `{"status":"ok","database":"cloudflare_d1_connected"}` |
-| ⚡ **Vercel API Health** | [https://cafaqr.vercel.app/health/db](https://cafaqr.vercel.app/health/db) | Supabase PostgreSQL diagnostic | Status: `{"status":"ok","database":"connected"}` |
+
+---
+
+### 🌐 Vercel + Supabase Secondary Stack
+
+| Portal | Live Vercel URL | Description |
+| :--- | :--- | :--- |
+| 📱 **Customer QR Menu** | [https://cafaqr-h5b1.vercel.app/order?tableNumber=1](https://cafaqr-h5b1.vercel.app/order?tableNumber=1) | Vercel Edge CDN Frontend |
+| 👨‍🍳 **Kitchen Display (KDS)** | [https://cafaqr-h5b1.vercel.app/kitchen](https://cafaqr-h5b1.vercel.app/kitchen) | Chef Kanban Board |
+| 📊 **Admin Portal** | [https://cafaqr-h5b1.vercel.app/admin](https://cafaqr-h5b1.vercel.app/admin) | Cashier Dashboard |
+| ⚡ **Vercel API Health** | [https://cafaqr.vercel.app/health/db](https://cafaqr.vercel.app/health/db) | Supabase PostgreSQL diagnostic |
 
 > **Manager Passkey for UPI Switching:** `1234`  
 > **Source Code Repository:** [https://github.com/sarathi07-coder/cafaqr](https://github.com/sarathi07-coder/cafaqr)
