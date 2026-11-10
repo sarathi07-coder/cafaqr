@@ -153,10 +153,12 @@ export const api = {
 
   // --- Kitchen Display System (KDS) ---
   async getKitchenTickets(restaurantId) {
-    const url = restaurantId
-      ? `${API_BASE}/kitchen/tickets?restaurantId=${restaurantId}`
-      : `${API_BASE}/kitchen/tickets`;
-    const res = await fetch(url);
+    const rId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
+    try {
+      const res = await fetch(`${API_BASE}/kitchen/tickets/${rId}`);
+      if (res.ok) return await res.json();
+    } catch (_) {}
+    const res = await fetch(`${API_BASE}/kitchen/tickets?restaurantId=${rId}`);
     if (!res.ok) throw new Error('Failed to fetch kitchen tickets');
     return res.json();
   },
@@ -164,6 +166,8 @@ export const api = {
   async advanceKitchenTicket(orderId) {
     const res = await fetch(`${API_BASE}/kitchen/tickets/${orderId}/advance`, {
       method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
     });
     const result = await res.json();
     if (!res.ok) throw new Error(result.error || 'Failed to advance ticket');

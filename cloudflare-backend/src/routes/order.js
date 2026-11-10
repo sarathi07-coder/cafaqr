@@ -76,7 +76,7 @@ order.post('/session/init', async (c) => {
     if (existingSession) {
       // Find any active order for this session
       const activeOrder = await c.env.DB.prepare(
-        `SELECT id, status, subtotal, tax_percentage, tax_amount, total, created_at
+        `SELECT id, status, subtotal, tax_percentage, tax_amount, total, created_at, notes
          FROM orders
          WHERE (session_token = ? OR session_id = ?) AND status NOT IN ('PAID', 'CANCELLED')
          ORDER BY created_at DESC LIMIT 1`
@@ -84,13 +84,27 @@ order.post('/session/init', async (c) => {
         .bind(existingSession.session_token, existingSession.id)
         .first();
 
+      let items = [];
+      if (activeOrder) {
+        const itemsRes = await c.env.DB.prepare(
+          `SELECT oi.*, mi.name, mi.photo_url, mi.is_veg, mi.category
+           FROM order_items oi
+           JOIN menu_items mi ON oi.menu_item_id = mi.id
+           WHERE oi.order_id = ?
+           ORDER BY oi.created_at ASC`
+        )
+          .bind(activeOrder.id)
+          .all();
+        items = itemsRes.results || [];
+      }
+
       return c.json({
         sessionToken: existingSession.session_token,
         sessionLabel: existingSession.session_label,
         sessionId: existingSession.id,
         isNew: false,
         hasActiveOrder: Boolean(activeOrder),
-        order: activeOrder || null,
+        order: activeOrder ? { ...activeOrder, items } : null,
         table,
       });
     }
@@ -369,19 +383,25 @@ order.post('/', async (c) => {
 
     const totals = await recalculateOrderTotals(c.env.DB, orderId, restaurantId);
 
+    const orderPayload = {
+      id: orderId,
+      orderId,
+      sessionToken: sToken,
+      sessionLabel: sLabel,
+      tableNumber: table.number,
+      status: 'PENDING',
+      subtotal: totals.subtotal,
+      taxPercentage: totals.taxPercentage,
+      taxAmount: totals.taxAmount,
+      total: totals.total,
+      currency: table.currency || '₹',
+      isExistingSession,
+    };
+
     return c.json(
       {
-        orderId,
-        sessionToken: sToken,
-        sessionLabel: sLabel,
-        tableNumber: table.number,
-        status: 'PENDING',
-        subtotal: totals.subtotal,
-        taxPercentage: totals.taxPercentage,
-        taxAmount: totals.taxAmount,
-        total: totals.total,
-        currency: table.currency || '₹',
-        isExistingSession,
+        ...orderPayload,
+        order: orderPayload,
       },
       201
     );

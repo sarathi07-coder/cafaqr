@@ -3,10 +3,9 @@ import { Hono } from 'hono';
 
 const kitchen = new Hono();
 
-// GET /api/kitchen/tickets/:restaurantId
-kitchen.get('/tickets/:restaurantId', async (c) => {
-  const restaurantId = c.req.param('restaurantId');
-  if (!restaurantId) return c.json({ error: 'restaurantId is required' }, 400);
+// Handler for fetching active kitchen tickets
+const fetchActiveTicketsHandler = async (c) => {
+  const restaurantId = c.req.param('restaurantId') || c.req.query('restaurantId') || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
 
   try {
     const ordersRes = await c.env.DB.prepare(
@@ -43,6 +42,8 @@ kitchen.get('/tickets/:restaurantId', async (c) => {
 
       tickets.push({
         ...ord,
+        id: ord.id,
+        order_id: ord.id,
         table_number: ord.table_number,
         session_label: ord.session_label || 'Customer',
         elapsed_minutes: Math.max(0, elapsedMinutes),
@@ -55,10 +56,14 @@ kitchen.get('/tickets/:restaurantId', async (c) => {
     console.error('Fetch kitchen tickets error:', err);
     return c.json({ error: 'Database error' }, 500);
   }
-});
+};
 
-// PUT /api/kitchen/tickets/:id/advance
-kitchen.put('/tickets/:id/advance', async (c) => {
+// Support both query param (/tickets?restaurantId=...) and path param (/tickets/:restaurantId)
+kitchen.get('/tickets', fetchActiveTicketsHandler);
+kitchen.get('/tickets/:restaurantId', fetchActiveTicketsHandler);
+
+// Handler for advancing kitchen tickets (PENDING -> PREPARING -> READY -> SERVED)
+const advanceTicketHandler = async (c) => {
   const orderId = c.req.param('id');
   try {
     const body = await c.req.json().catch(() => ({}));
@@ -96,13 +101,21 @@ kitchen.put('/tickets/:id/advance', async (c) => {
       success: true,
       orderId,
       status: targetStatus,
+      order: {
+        id: orderId,
+        orderId,
+        status: targetStatus,
+      },
       message: `Ticket advanced to ${targetStatus}`,
     });
   } catch (err) {
     console.error('Advance ticket error:', err);
     return c.json({ error: 'Database error' }, 500);
   }
-});
+};
+
+// PUT & POST /api/kitchen/tickets/:id/advance
+kitchen.put('/tickets/:id/advance', advanceTicketHandler);
+kitchen.post('/tickets/:id/advance', advanceTicketHandler);
 
 export default kitchen;
-

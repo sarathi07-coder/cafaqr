@@ -108,12 +108,18 @@ export default function KitchenPage() {
     socket.on('order:status_updated', handleOrderUpdated);
     socket.on('kitchen:ticket_advanced', handleOrderUpdated);
 
-    // Auto-refresh interval every 4.5 seconds (pauses when tab is hidden to save DB connections)
+    // Auto-refresh interval every 3 seconds (pauses when tab is hidden to save DB connections)
     const timer = setInterval(() => {
       if (document.hidden) return;
       const targetId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
       loadTickets(targetId);
-    }, 4500);
+    }, 3000);
+
+    const handleFocus = () => {
+      const targetId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
+      loadTickets(targetId);
+    };
+    window.addEventListener('focus', handleFocus);
 
     return () => {
       socket.off('order:new', handleNewOrder);
@@ -121,6 +127,7 @@ export default function KitchenPage() {
       socket.off('kitchen:ticket_updated', handleOrderUpdated);
       socket.off('order:status_updated', handleOrderUpdated);
       socket.off('kitchen:ticket_advanced', handleOrderUpdated);
+      window.removeEventListener('focus', handleFocus);
       clearInterval(timer);
     };
   }, [restaurantId, soundEnabled]);
@@ -134,13 +141,16 @@ export default function KitchenPage() {
     }
     try {
       const res = await api.advanceKitchenTicket(orderId);
+      const nextStatus = res.order?.status || res.status || 'PREPARING';
       setTickets((prev) =>
         prev.map((t) =>
           t.id === orderId || t.order_id === orderId
-            ? { ...t, status: res.order.status }
+            ? { ...t, status: nextStatus }
             : t
         )
       );
+      const targetId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
+      loadTickets(targetId);
     } catch (err) {
       alert(err.message || 'Failed to advance ticket');
     }

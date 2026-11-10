@@ -36,3 +36,7 @@ bin/
 VERCEL_ENV_KEYS.txt
 backend.env
 
+# Wrangler & Cloudflare
+.wrangler/
+*/.wrangler/
+
