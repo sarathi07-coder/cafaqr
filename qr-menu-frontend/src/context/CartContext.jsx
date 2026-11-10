@@ -237,7 +237,9 @@ export function CartProvider({ children }) {
       vegCount,
       nonVegCount,
       vegSubtotal,
+      vegTotal: vegSubtotal,
       nonVegSubtotal,
+      nonVegTotal: nonVegSubtotal,
     };
   }, [cartItems]);
 

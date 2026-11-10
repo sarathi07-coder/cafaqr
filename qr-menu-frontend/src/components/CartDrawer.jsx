@@ -137,7 +137,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
       setSplitResult({
         totalAmount: grandTotal,
         splitWays: ways,
-        perPersonShare: baseShare.toFixed(2),
+        perPersonShare: parseFloat(baseShare || 0).toFixed(2),
       });
     }
   };
@@ -419,13 +419,13 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                     <span>Placed Items Subtotal</span>
                     <span>₹{parseFloat(activeOrder.subtotal || 0).toFixed(2)}</span>
                   </div>
-                  {(activeDietaryStats.vegCount > 0 || activeDietaryStats.nonVegCount > 0) && (
+                  {(activeDietaryStats?.vegCount > 0 || activeDietaryStats?.nonVegCount > 0) && (
                     <div className="flex justify-between text-stone-400 text-[11px]">
                       <span>Dietary Split</span>
                       <span className="font-semibold text-stone-300">
-                        {activeDietaryStats.vegCount > 0 ? `${activeDietaryStats.vegCount} Veg (₹${activeDietaryStats.vegTotal.toFixed(0)})` : ''}
+                        {activeDietaryStats.vegCount > 0 ? `${activeDietaryStats.vegCount} Veg (₹${parseFloat(activeDietaryStats?.vegTotal || 0).toFixed(0)})` : ''}
                         {activeDietaryStats.vegCount > 0 && activeDietaryStats.nonVegCount > 0 ? ' • ' : ''}
-                        {activeDietaryStats.nonVegCount > 0 ? `${activeDietaryStats.nonVegCount} Non-Veg (₹${activeDietaryStats.nonVegTotal.toFixed(0)})` : ''}
+                        {activeDietaryStats.nonVegCount > 0 ? `${activeDietaryStats.nonVegCount} Non-Veg (₹${parseFloat(activeDietaryStats?.nonVegTotal || 0).toFixed(0)})` : ''}
                       </span>
                     </div>
                   )}
@@ -569,7 +569,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                             <span className="text-xs font-bold text-emerald-300">Pure Veg</span>
                           </div>
                           <p className="text-base font-black text-emerald-400 font-mono">
-                            ₹{(dietaryStats?.vegSubtotal || 0).toFixed(2)}
+                            ₹{parseFloat(dietaryStats?.vegSubtotal || dietaryStats?.vegTotal || 0).toFixed(2)}
                           </p>
                           <p className="text-[10px] text-emerald-400/80 font-medium">
                             {dietaryStats?.vegCount || 0} {dietaryStats?.vegCount === 1 ? 'portion' : 'portions'}
@@ -585,7 +585,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                             <span className="text-xs font-bold text-rose-300">Non-Veg</span>
                           </div>
                           <p className="text-base font-black text-rose-400 font-mono">
-                            ₹{(dietaryStats?.nonVegSubtotal || 0).toFixed(2)}
+                            ₹{parseFloat(dietaryStats?.nonVegSubtotal || dietaryStats?.nonVegTotal || 0).toFixed(2)}
                           </p>
                           <p className="text-[10px] text-rose-400/80 font-medium">
                             {dietaryStats?.nonVegCount || 0} {dietaryStats?.nonVegCount === 1 ? 'portion' : 'portions'}
@@ -757,32 +757,32 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                 )}
                 <div className="flex justify-between">
                   <span>{hasActiveSession ? 'New Additions Subtotal' : 'Food Subtotal'}</span>
-                  <span className="font-semibold text-white font-mono">₹{subtotal.toFixed(2)}</span>
+                  <span className="font-semibold text-white font-mono">₹{parseFloat(subtotal || 0).toFixed(2)}</span>
                 </div>
                 {(dietaryStats?.vegCount > 0 || dietaryStats?.nonVegCount > 0) && (
                   <div className="flex justify-between text-[11px] text-stone-500">
                     <span>Dietary Calculation</span>
                     <span className="font-medium text-stone-300">
-                      {dietaryStats.vegCount > 0 ? `${dietaryStats.vegCount} Veg (₹${dietaryStats.vegSubtotal.toFixed(0)})` : ''}
+                      {dietaryStats.vegCount > 0 ? `${dietaryStats.vegCount} Veg (₹${parseFloat(dietaryStats?.vegSubtotal || dietaryStats?.vegTotal || 0).toFixed(0)})` : ''}
                       {dietaryStats.vegCount > 0 && dietaryStats.nonVegCount > 0 ? ' • ' : ''}
-                      {dietaryStats.nonVegCount > 0 ? `${dietaryStats.nonVegCount} Non-Veg (₹${dietaryStats.nonVegTotal.toFixed(0)})` : ''}
+                      {dietaryStats.nonVegCount > 0 ? `${dietaryStats.nonVegCount} Non-Veg (₹${parseFloat(dietaryStats?.nonVegSubtotal || dietaryStats?.nonVegTotal || 0).toFixed(0)})` : ''}
                     </span>
                   </div>
                 )}
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-emerald-400 font-semibold font-mono">
                     <span>Coupon Discount</span>
-                    <span>-₹{discountAmount.toFixed(2)}</span>
+                    <span>-₹{parseFloat(discountAmount || 0).toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <span>GST Tax (5%)</span>
-                  <span className="font-semibold text-white font-mono">₹{taxAmount.toFixed(2)}</span>
+                  <span className="font-semibold text-white font-mono">₹{parseFloat(taxAmount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-base font-black text-white pt-2 border-t border-white/10 font-mono">
                   <span>{hasActiveSession ? 'Combined Table Total' : 'Grand Total'}</span>
                   <span className="text-emerald-400">
-                    ₹{(hasActiveSession && activeOrder ? parseFloat(activeOrder.total || 0) + grandTotal : grandTotal).toFixed(2)}
+                    ₹{(hasActiveSession && activeOrder ? parseFloat(activeOrder?.total || 0) + parseFloat(grandTotal || 0) : parseFloat(grandTotal || 0)).toFixed(2)}
                   </span>
                 </div>
               </div>
