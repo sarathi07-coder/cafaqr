@@ -1198,7 +1198,7 @@ export default function AdminDashboardPage() {
                     {(todayKPI?.tableLeaderboard || []).length === 0 ? (
                       <p className="text-xs text-stone-400 italic py-4 text-center">No orders recorded yet today.</p>
                     ) : (
-                      todayKPI.tableLeaderboard.slice(0, 5).map((t, idx) => (
+                      (todayKPI?.tableLeaderboard || []).slice(0, 5).map((t, idx) => (
                         <div
                           key={idx}
                           className="p-3 rounded-2xl bg-stone-50 border border-stone-100 flex items-center justify-between"
@@ -1316,7 +1316,7 @@ export default function AdminDashboardPage() {
                     </p>
                   </div>
                 ) : (
-                  groupedTables.map((table) => (
+                  (groupedTables || []).map((table) => (
                     <div
                       key={table.tableId}
                       className="bg-white rounded-3xl border-2 border-stone-800 shadow-md overflow-hidden"
@@ -1362,7 +1362,7 @@ export default function AdminDashboardPage() {
 
                       {/* Sections: Individual Customer Sessions */}
                       <div className="divide-y divide-stone-200 bg-stone-50/50">
-                        {table.sections.map((sec) => (
+                        {(table.customerSections || table.sections || []).map((sec) => (
                           <div
                             key={sec.orderId}
                             className="p-4 hover:bg-white transition flex flex-col md:flex-row md:items-center justify-between gap-4"
@@ -1371,7 +1371,7 @@ export default function AdminDashboardPage() {
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-bold text-sm text-stone-900 flex items-center gap-1.5">
                                   <span>👤</span>
-                                  <span>{sec.sectionLabel}</span>
+                                  <span>{sec.sessionLabel || sec.sectionLabel || 'Customer'}</span>
                                   <span className="text-stone-500 font-normal">({sec.customerName})</span>
                                 </span>
                                 <span
@@ -1391,7 +1391,7 @@ export default function AdminDashboardPage() {
 
                               {/* Dishes */}
                               <div className="pl-6 space-y-1">
-                                {sec.items.map((it, idx) => (
+                                {(sec.items || []).map((it, idx) => (
                                   <div key={idx} className="flex items-center gap-2 text-xs text-stone-700">
                                     <span className="font-semibold text-stone-900">
                                       • {it.quantity}x {it.name || it.item_name}
@@ -1453,7 +1453,7 @@ export default function AdminDashboardPage() {
                     No active orders recorded. Fresh orders placed from table QR codes will appear here in real-time.
                   </p>
                 ) : (
-                  (ordersList.length > 0 ? ordersList : overview.recent_orders).map((order) => (
+                  (ordersList.length > 0 ? ordersList : (overview?.recent_orders || [])).map((order) => (
                     <div
                       key={order.id}
                       className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4"
@@ -1492,7 +1492,7 @@ export default function AdminDashboardPage() {
                         {/* Dishes ordered on this bill */}
                         {Array.isArray(order.items) && order.items.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
-                            {order.items.map((it, idx) => (
+                            {(order.items || []).map((it, idx) => (
                               <span
                                 key={idx}
                                 className={`text-[11px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1 ${
@@ -1559,12 +1559,12 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="space-y-3">
-              {serviceRequests.length === 0 ? (
+              {(serviceRequests || []).length === 0 ? (
                 <div className="py-12 text-center text-stone-400 text-xs italic">
                   All table service calls have been resolved!
                 </div>
               ) : (
-                serviceRequests.map((req) => (
+                (serviceRequests || []).map((req) => (
                   <div
                     key={req.id}
                     className="p-4 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between"
@@ -1817,7 +1817,7 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {tables.map((tbl) => {
+              {(tables || []).map((tbl) => {
                 const tableIdVal = tbl.tableId || tbl.table_id || tbl.id;
                 const tableNumVal = tbl.tableNumber || tbl.table_number || tbl.number;
                 const qrSrc = tbl.qrCodeDataUrl || tbl.qr_data_url || tbl.qr_code_url || `/api/qr/${tableIdVal}`;
@@ -1927,7 +1927,7 @@ export default function AdminDashboardPage() {
             </form>
 
             <div className="space-y-2">
-              {coupons.map((c) => (
+              {(coupons || []).map((c) => (
                 <div
                   key={c.id}
                   className="p-3 bg-stone-50 border border-stone-200 rounded-xl flex items-center justify-between text-xs"
@@ -2001,7 +2001,7 @@ export default function AdminDashboardPage() {
                       Recommended Immediate Action Points:
                     </span>
                     <ul className="text-xs text-stone-700 space-y-1 list-disc pl-4">
-                      {reviewsAI.managerActionItems.map((item, idx) => (
+                      {(reviewsAI?.managerActionItems || []).map((item, idx) => (
                         <li key={idx} className="leading-snug">{item}</li>
                       ))}
                     </ul>
@@ -2158,7 +2158,7 @@ export default function AdminDashboardPage() {
                     </p>
                   </div>
                 ) : (
-                  displayedReviews.map((fb) => {
+                  (displayedReviews || []).map((fb) => {
                     const ratingNum = parseInt(fb.rating || 5, 10);
                     const isGood = ratingNum >= 4;
 
@@ -2535,7 +2535,7 @@ export default function AdminDashboardPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {incomingUpiPayments.map((notice) => (
+                  {(incomingUpiPayments || []).map((notice) => (
                     <div
                       key={notice.id}
                       className="p-4 rounded-2xl bg-emerald-50/40 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"

@@ -60,3 +60,4 @@ export default function SafeQRCode({
 // Named alias matching legacy QRCodeSVG import
 export const QRCodeSVG = SafeQRCode;
 export const QRCodeCanvas = SafeQRCode;
+

@@ -130,24 +130,29 @@ admin.get('/tables/active-grouped', async (c) => {
           tableNumber: ord.table_number,
           combinedBill: 0,
           activeCustomersCount: 0,
+          sections: [],
           customerSections: [],
         };
       }
 
-      tableMap[ord.table_id].combinedBill += Number(ord.total || 0);
-      tableMap[ord.table_id].activeCustomersCount += 1;
-      tableMap[ord.table_id].customerSections.push({
+      const secData = {
         orderId: ord.order_id,
         sessionLabel: ord.session_label || 'Customer',
+        sectionLabel: ord.session_label || 'Customer',
         customerName: ord.customer_name || 'Diner',
         status: ord.status,
         subtotal: ord.subtotal,
         taxAmount: ord.tax_amount,
         total: ord.total,
-        items: ord.items,
+        items: ord.items || [],
         notes: ord.notes,
         createdAt: ord.created_at,
-      });
+      };
+
+      tableMap[ord.table_id].combinedBill += Number(ord.total || 0);
+      tableMap[ord.table_id].activeCustomersCount += 1;
+      tableMap[ord.table_id].sections.push(secData);
+      tableMap[ord.table_id].customerSections.push(secData);
     }
 
     return c.json(Object.values(tableMap));

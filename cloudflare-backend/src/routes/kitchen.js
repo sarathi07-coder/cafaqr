@@ -13,7 +13,15 @@ const fetchActiveTicketsHandler = async (c) => {
               o.session_token, o.session_label, t.number as table_number
        FROM orders o
        JOIN tables t ON o.table_id = t.id
-       WHERE o.restaurant_id = ? AND o.status IN ('PENDING', 'PREPARING', 'READY')
+       WHERE o.restaurant_id = ?
+         AND o.status NOT IN ('PAID', 'CANCELLED')
+         AND (
+           o.status IN ('PENDING', 'PREPARING', 'READY')
+           OR EXISTS (
+             SELECT 1 FROM order_items oi
+             WHERE oi.order_id = o.id AND oi.status IN ('PENDING', 'PREPARING')
+           )
+         )
        ORDER BY o.created_at ASC`
     )
       .bind(restaurantId)
@@ -35,6 +43,9 @@ const fetchActiveTicketsHandler = async (c) => {
         .all();
 
       const items = itemsRes.results || [];
+
+      // Only show tickets that have cooking items
+      if (items.length === 0) continue;
 
       // Calculate elapsed minutes
       const createdAt = new Date(ord.created_at || Date.now());

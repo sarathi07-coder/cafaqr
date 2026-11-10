@@ -362,8 +362,12 @@ order.post('/', async (c) => {
         `INSERT INTO orders (id, restaurant_id, table_id, customer_id, session_id, session_token, session_label, status, notes, subtotal, tax_percentage, tax_amount, total)
          VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, 0, ?, 0, 0)`
       ).bind(orderId, restaurantId, tableId, customerId, sId, sToken, sLabel, notes || null, Number(table.tax_percentage || 5.0)).run();
-    } else if (notes) {
-      await c.env.DB.prepare("UPDATE orders SET notes = COALESCE(notes || '; ', '') || ? WHERE id = ?").bind(notes, orderId).run();
+    } else {
+      if (notes) {
+        await c.env.DB.prepare("UPDATE orders SET notes = COALESCE(notes || '; ', '') || ? WHERE id = ?").bind(notes, orderId).run();
+      }
+      // Re-alert kitchen with PENDING status when new items are added to active running order
+      await c.env.DB.prepare("UPDATE orders SET status = 'PENDING', updated_at = datetime('now') WHERE id = ?").bind(orderId).run();
     }
 
     // Insert items

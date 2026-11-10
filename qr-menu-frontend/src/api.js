@@ -58,7 +58,7 @@ export const api = {
 
   async addItemsToOrder(orderId, items) {
     // Backend expects items as [{ menuItemId, quantity }]
-    const formatted = items.map((it) => ({
+    const formatted = (Array.isArray(items) ? items : []).map((it) => ({
       menuItemId: it.menu_item_id || it.menuItemId || it.id,
       quantity: it.quantity,
     }));
