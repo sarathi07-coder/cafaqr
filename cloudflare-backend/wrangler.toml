@@ -1,0 +1,13 @@
+name = "cafaqr-api"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cafaqr-production-db"
+database_id = "cafaqr-d1-db-id"
+
+[vars]
+JWT_SECRET = "cafaqr_cloudflare_secret_token_123"
+ADMIN_PASSWORD = "supersecret"

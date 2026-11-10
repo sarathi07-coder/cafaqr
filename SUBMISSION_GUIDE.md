@@ -97,3 +97,24 @@ cd ../qr-menu-frontend
 npm install
 npm run dev   # Starts Vite React on port 5173
 ```
+
+---
+
+## ⚡ 6. Cloudflare Native Stack (Workers + D1 SQLite)
+
+The repository also includes a **100% native Cloudflare Workers + Cloudflare D1 (SQLite)** backend inside `cloudflare-backend/`:
+
+```bash
+# Navigate to Cloudflare backend
+cd cloudflare-backend
+
+# Run all 10 Module verification test suites
+npm run test:all
+
+# Deploy to Cloudflare Workers & D1
+npm run db:create        # Creates remote D1 database
+npm run db:seed:remote   # Runs schema & seed on Cloudflare edge
+npm run deploy           # Deploys Worker to Cloudflare edge
+```
+
+

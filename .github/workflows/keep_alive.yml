@@ -21,3 +21,4 @@ jobs:
         run: |
           echo "Pinging Frontend Edge CDN..."
           curl -s -w "\nHTTP Status: %{http_code} | Total Time: %{time_total}s\n" https://cafaqr-h5b1.vercel.app/
+
