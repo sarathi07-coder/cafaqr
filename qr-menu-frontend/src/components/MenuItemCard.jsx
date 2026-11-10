@@ -4,7 +4,7 @@ import { useCart } from '../context/CartContext';
 
 export default function MenuItemCard({ item }) {
   const { cartItems, addItem, updateQuantity } = useCart();
-  const cartItem = cartItems[item.id];
+  const cartItem = cartItems?.[item.id];
   const count = cartItem ? cartItem.quantity : 0;
   const isAvailable = item.is_available !== false && item.available !== false;
 

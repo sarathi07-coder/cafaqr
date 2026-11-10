@@ -30,16 +30,41 @@ import { socket } from '../socket';
 class SafeModalBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, error: null };
   }
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
   }
-  componentDidCatch(err) {
-    console.warn('SafeModalBoundary caught modal exception:', err);
+  componentDidCatch(err, info) {
+    console.warn('SafeModalBoundary caught modal exception:', err, info);
+  }
+  componentDidUpdate(prevProps) {
+    if (prevProps.isOpen !== this.props.isOpen && this.state.hasError) {
+      this.setState({ hasError: false, error: null });
+    }
   }
   render() {
-    if (this.state.hasError) return null;
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#14110E] border border-white/15 p-6 rounded-2xl max-w-sm text-center text-white space-y-3 shadow-2xl">
+            <p className="font-bold text-sm">Order Drawer Notice</p>
+            <p className="text-xs text-stone-400">
+              {this.state.error?.message || 'An error occurred while displaying your order.'}
+            </p>
+            <div className="flex gap-2 justify-center pt-2">
+              <button
+                type="button"
+                onClick={() => this.setState({ hasError: false, error: null })}
+                className="px-4 py-2 krish-gradient-gold text-stone-950 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Reload Drawer
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return this.props.children;
   }
 }
@@ -216,7 +241,7 @@ export default function CustomerMenuPage() {
     function handleAvailabilityChanged(updated) {
       if (!updated?.id) return;
       setMenuItems((prev) =>
-        prev.map((it) => (it.id === updated.id ? { ...it, available: updated.available, is_available: updated.available } : it))
+        (Array.isArray(prev) ? prev : []).map((it) => (it.id === updated.id ? { ...it, available: updated.available, is_available: updated.available } : it))
       );
     }
 
@@ -385,6 +410,8 @@ export default function CustomerMenuPage() {
         sessionLabel={sessionLabel}
         customerName={customerName}
         hasActiveSession={hasActiveSession}
+        cartItemCount={totalItemCount}
+        onOpenCart={() => setIsCartOpen(true)}
         onViewBill={() => setIsCartOpen(true)}
         onCallWaiter={() => setIsServiceModalOpen(true)}
       />
@@ -580,7 +607,7 @@ export default function CustomerMenuPage() {
               {/* Running Dishes on Tab */}
               {Array.isArray(activeOrder?.items) && activeOrder.items.length > 0 && (
                 <p className="text-[11px] text-stone-400 truncate max-w-sm">
-                  Active Items: {activeOrder.items.map((i) => `${i.quantity}x ${i.name || i.item_name}`).join(', ')}
+                  Active Items: {(Array.isArray(activeOrder?.items) ? activeOrder.items : []).map((i) => `${i?.quantity || 1}x ${i?.name || i?.item_name || 'Item'}`).join(', ')}
                 </p>
               )}
             </div>
@@ -774,7 +801,7 @@ export default function CustomerMenuPage() {
       />
 
       {/* Cart & Ordering Drawer */}
-      <SafeModalBoundary>
+      <SafeModalBoundary isOpen={isCartOpen}>
         <CartDrawer
           isOpen={isCartOpen}
           onClose={() => setIsCartOpen(false)}

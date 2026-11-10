@@ -171,9 +171,9 @@ export default function AdminDashboardPage() {
   const [resetStatus, setResetStatus] = useState({ error: '', success: '', loading: false });
 
   const segregatedReviews = React.useMemo(() => {
-    const list = feedbackList || [];
-    const good = list.filter(r => (parseInt(r.rating || 5, 10) >= 4));
-    const bad = list.filter(r => (parseInt(r.rating || 5, 10) <= 3));
+    const list = Array.isArray(feedbackList) ? feedbackList : [];
+    const good = list.filter(r => (parseInt(r?.rating || 5, 10) >= 4));
+    const bad = list.filter(r => (parseInt(r?.rating || 5, 10) <= 3));
     return { all: list, good, bad };
   }, [feedbackList]);
 
@@ -525,12 +525,14 @@ export default function AdminDashboardPage() {
   // Real-time socket events
   useEffect(() => {
     function handleServiceRequested(req) {
+      if (!req) return;
       setToastMessage(`🛎️ New Table Call: ${req.request_type || 'Assistance'} on Table #${req.table_number || ''}`);
-      setServiceRequests((prev) => [req, ...prev]);
+      setServiceRequests((prev) => [req, ...(Array.isArray(prev) ? prev : [])]);
     }
 
     function handleServiceResolved(data) {
-      setServiceRequests((prev) => prev.filter((r) => r.id !== data.requestId));
+      if (!data?.requestId) return;
+      setServiceRequests((prev) => (Array.isArray(prev) ? prev : []).filter((r) => r.id !== data.requestId));
     }
 
     function handleOrderActivity() {
@@ -550,6 +552,7 @@ export default function AdminDashboardPage() {
     }
 
     function handleNewFeedback(fb) {
+      if (!fb) return;
       setToastMessage(`🌟 New ${fb.rating}/5 Star Review from Table #${fb.tableId || 'Diner'}!`);
       if (restaurantId && token) {
         api.getFeedbackList(restaurantId, token).then((data) => {
@@ -560,11 +563,12 @@ export default function AdminDashboardPage() {
     }
 
     function handleUpiPaymentSubmitted(notice) {
-      setIncomingUpiPayments((prev) => [notice, ...prev.filter(p => p.id !== notice.id)]);
+      if (!notice) return;
+      setIncomingUpiPayments((prev) => [notice, ...(Array.isArray(prev) ? prev : []).filter(p => p.id !== notice.id)]);
       setToastMessage(`⚡ UPI Payment Alert: Table #${notice.tableNumber} - ₹${parseFloat(notice.amount).toFixed(2)}${notice.utr ? ` (UTR: ${notice.utr})` : ''}`);
       if (restaurantId && token) {
-        api.getActiveGroupedTables(restaurantId, token).then(setGroupedTables).catch(() => {});
-        api.getAdminOrders(restaurantId, token).then(setOrdersList).catch(() => {});
+        api.getActiveGroupedTables(restaurantId, token).then((g) => setGroupedTables(Array.isArray(g) ? g : [])).catch(() => {});
+        api.getAdminOrders(restaurantId, token).then((o) => setOrdersList(Array.isArray(o) ? o : [])).catch(() => {});
       }
     }
 
@@ -586,8 +590,8 @@ export default function AdminDashboardPage() {
       if (document.hidden) return;
       const activeId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
       if (token) {
-        api.getActiveGroupedTables(activeId, token).then(setGroupedTables).catch(() => {});
-        api.getAdminOrders(activeId, token).then(setOrdersList).catch(() => {});
+        api.getActiveGroupedTables(activeId, token).then((g) => setGroupedTables(Array.isArray(g) ? g : [])).catch(() => {});
+        api.getAdminOrders(activeId, token).then((o) => setOrdersList(Array.isArray(o) ? o : [])).catch(() => {});
       }
     }, 5500);
 
@@ -626,7 +630,7 @@ export default function AdminDashboardPage() {
     try {
       const res = await api.toggleDishAvailability(itemId, token);
       setMenuItems((prev) =>
-        prev.map((item) =>
+        (Array.isArray(prev) ? prev : []).map((item) =>
           item.id === itemId
             ? { ...item, available: res.item.available, is_available: res.item.available }
             : item
@@ -642,7 +646,7 @@ export default function AdminDashboardPage() {
   const handleResolveService = async (reqId) => {
     try {
       await api.resolveServiceRequest(reqId, token);
-      setServiceRequests((prev) => prev.filter((r) => r.id !== reqId));
+      setServiceRequests((prev) => (Array.isArray(prev) ? prev : []).filter((r) => r.id !== reqId));
       setToastMessage('Table request marked resolved!');
     } catch (err) {
       alert(err.message || 'Failed to resolve request');
@@ -710,7 +714,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const pendingCallsCount = serviceRequests.filter((r) => r.status === 'PENDING').length;
+  const pendingCallsCount = (Array.isArray(serviceRequests) ? serviceRequests : []).filter((r) => r?.status === 'PENDING').length;
 
   return (
     <div className="min-h-screen bg-stone-100 flex flex-col font-sans text-stone-900">
@@ -866,6 +870,7 @@ export default function AdminDashboardPage() {
         
         {/* TAB 1: BENTO OVERVIEW */}
         {activeTab === 'overview' && (
+          <TabErrorBoundary>
           <div className="space-y-6 animate-fade-in">
             {/* Top 4 Real-Time KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1070,9 +1075,9 @@ export default function AdminDashboardPage() {
               {/* Hourly Influx Histogram */}
               <div className="pt-4">
                 <div className="grid grid-cols-7 sm:grid-cols-14 gap-2 items-end h-36 border-b border-stone-200 pb-2">
-                  {(peakHours?.hourlyCurve || []).map((slot, idx) => {
-                    const maxTraffic = Math.max(1, ...(peakHours?.hourlyCurve || []).map(s => s.orderCount));
-                    const heightPercent = Math.max(12, Math.round((slot.orderCount / maxTraffic) * 100));
+                  {(Array.isArray(peakHours?.hourlyCurve) ? peakHours.hourlyCurve : []).map((slot, idx) => {
+                    const maxTraffic = Math.max(1, ...(Array.isArray(peakHours?.hourlyCurve) ? peakHours.hourlyCurve : []).map(s => s?.orderCount || 0));
+                    const heightPercent = Math.max(12, Math.round(((slot?.orderCount || 0) / maxTraffic) * 100));
                     const isLunch = slot.hour >= 12 && slot.hour <= 15;
                     const isDinner = slot.hour >= 19 && slot.hour <= 22;
 
@@ -1191,7 +1196,7 @@ export default function AdminDashboardPage() {
                     <h4 className="text-xs font-bold uppercase tracking-wider text-stone-600">
                       Top 5 Dishes By Volume Today
                     </h4>
-                    {(dishPerf?.topPerformers || overview?.top_items || []).map((item, idx) => (
+                    {(Array.isArray(dishPerf?.topPerformers) ? dishPerf.topPerformers : (Array.isArray(overview?.top_items) ? overview.top_items : [])).map((item, idx) => (
                       <div
                         key={idx}
                         className="flex items-center justify-between p-3 rounded-2xl bg-stone-50 border border-stone-100"
@@ -1236,10 +1241,10 @@ export default function AdminDashboardPage() {
                     <span className="text-xs text-stone-400">By Turnover</span>
                   </div>
                   <div className="space-y-2.5">
-                    {(todayKPI?.tableLeaderboard || []).length === 0 ? (
+                    {(Array.isArray(todayKPI?.tableLeaderboard) ? todayKPI.tableLeaderboard : []).length === 0 ? (
                       <p className="text-xs text-stone-400 italic py-4 text-center">No orders recorded yet today.</p>
                     ) : (
-                      (todayKPI?.tableLeaderboard || []).slice(0, 5).map((t, idx) => (
+                      (Array.isArray(todayKPI?.tableLeaderboard) ? todayKPI.tableLeaderboard : []).slice(0, 5).map((t, idx) => (
                         <div
                           key={idx}
                           className="p-3 rounded-2xl bg-stone-50 border border-stone-100 flex items-center justify-between"
@@ -1283,7 +1288,7 @@ export default function AdminDashboardPage() {
                     <span className="text-[11px] text-stone-400">Past 7 days</span>
                   </div>
                   <div className="space-y-2 pt-1">
-                    {(opsTargets?.operations?.paymentBreakdown || []).map((p, idx) => (
+                    {(Array.isArray(opsTargets?.operations?.paymentBreakdown) ? opsTargets.operations.paymentBreakdown : []).map((p, idx) => (
                       <div key={idx} className="space-y-1">
                         <div className="flex justify-between text-xs">
                           <span className="font-bold text-stone-700">{p.method}</span>
@@ -1305,10 +1310,12 @@ export default function AdminDashboardPage() {
               </div>
             </div>
           </div>
+          </TabErrorBoundary>
         )}
 
         {/* TAB 2: LIVE ORDERS & CHECKOUT */}
         {activeTab === 'orders' && (
+          <TabErrorBoundary>
           <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-5 animate-fade-in">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-stone-100 gap-3">
               <div>
@@ -1348,7 +1355,7 @@ export default function AdminDashboardPage() {
             {/* MODE 1: GROUPED BY TABLE VIEW (RECOMMENDED) */}
             {ordersViewMode === 'grouped' && (
               <div className="space-y-6">
-                {groupedTables.length === 0 ? (
+                {(Array.isArray(groupedTables) ? groupedTables : []).length === 0 ? (
                   <div className="py-12 text-center">
                     <p className="text-3xl mb-2">🪑</p>
                     <p className="text-sm font-bold text-stone-700">No Active Tables</p>
@@ -1357,7 +1364,7 @@ export default function AdminDashboardPage() {
                     </p>
                   </div>
                 ) : (
-                  (groupedTables || []).map((table) => (
+                  (Array.isArray(groupedTables) ? groupedTables : []).map((table) => (
                     <div
                       key={table.tableId}
                       className="bg-white rounded-3xl border-2 border-stone-800 shadow-md overflow-hidden"
@@ -1403,7 +1410,7 @@ export default function AdminDashboardPage() {
 
                       {/* Sections: Individual Customer Sessions */}
                       <div className="divide-y divide-stone-200 bg-stone-50/50">
-                        {(table.customerSections || table.sections || []).map((sec) => (
+                        {(Array.isArray(table?.customerSections) ? table.customerSections : (Array.isArray(table?.sections) ? table.sections : [])).map((sec) => (
                           <div
                             key={sec.orderId}
                             className="p-4 hover:bg-white transition flex flex-col md:flex-row md:items-center justify-between gap-4"
@@ -1432,7 +1439,7 @@ export default function AdminDashboardPage() {
 
                               {/* Dishes */}
                               <div className="pl-6 space-y-1">
-                                {(sec.items || []).map((it, idx) => (
+                                {(Array.isArray(sec?.items) ? sec.items : []).map((it, idx) => (
                                   <div key={idx} className="flex items-center gap-2 text-xs text-stone-700">
                                     <span className="font-semibold text-stone-900">
                                       • {it.quantity}x {it.name || it.item_name}
@@ -1489,12 +1496,12 @@ export default function AdminDashboardPage() {
             {/* MODE 2: FLAT ORDER STREAM */}
             {ordersViewMode === 'stream' && (
               <div className="space-y-3">
-                {(ordersList.length === 0 && (!overview?.recent_orders || overview.recent_orders.length === 0)) ? (
+                {(((Array.isArray(ordersList) ? ordersList : []).length === 0) && (!overview?.recent_orders || overview.recent_orders.length === 0)) ? (
                   <p className="text-xs text-stone-400 italic py-8 text-center">
                     No active orders recorded. Fresh orders placed from table QR codes will appear here in real-time.
                   </p>
                 ) : (
-                  (ordersList.length > 0 ? ordersList : (overview?.recent_orders || [])).map((order) => (
+                  ((Array.isArray(ordersList) && ordersList.length > 0) ? ordersList : (Array.isArray(overview?.recent_orders) ? overview.recent_orders : [])).map((order) => (
                     <div
                       key={order.id}
                       className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4"
@@ -1509,7 +1516,7 @@ export default function AdminDashboardPage() {
                               {order.session_label}
                             </span>
                           )}
-                          <span className="text-xs text-stone-500 font-mono">#{order.id.slice(0, 8)}</span>
+                          <span className="text-xs text-stone-500 font-mono">#{String(order?.id || '').slice(0, 8)}</span>
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
                               order.status === 'PAID'
@@ -1533,7 +1540,7 @@ export default function AdminDashboardPage() {
                         {/* Dishes ordered on this bill */}
                         {Array.isArray(order.items) && order.items.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
-                            {(order.items || []).map((it, idx) => (
+                            {(Array.isArray(order?.items) ? order.items : []).map((it, idx) => (
                               <span
                                 key={idx}
                                 className={`text-[11px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1 ${
@@ -1583,6 +1590,7 @@ export default function AdminDashboardPage() {
               </div>
             )}
           </div>
+          </TabErrorBoundary>
         )}
 
         {/* TAB 3: STAFF SERVICE REQUESTS */}
@@ -1601,12 +1609,12 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="space-y-3">
-              {(serviceRequests || []).length === 0 ? (
+              {(Array.isArray(serviceRequests) ? serviceRequests : []).length === 0 ? (
                 <div className="py-12 text-center text-stone-400 text-xs italic">
                   All table service calls have been resolved!
                 </div>
               ) : (
-                (serviceRequests || []).map((req) => (
+                (Array.isArray(serviceRequests) ? serviceRequests : []).map((req) => (
                   <div
                     key={req.id}
                     className="p-4 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between"
@@ -1648,6 +1656,7 @@ export default function AdminDashboardPage() {
 
         {/* TAB 4: MENU & FOOD CATALOG STUDIO */}
         {activeTab === 'menu' && (
+          <TabErrorBoundary>
           <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-6 animate-fade-in">
             {/* Header with Add Food Button */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-100">
@@ -1672,7 +1681,7 @@ export default function AdminDashboardPage() {
 
             {/* Category Filter Ribbon */}
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-              {['ALL', 'Starters', 'Main Course', 'Breads', 'Desserts', 'Beverages'].map((cat) => (
+              {Array.from(new Set(['ALL', ...(Array.isArray(menuItems) ? menuItems.map(it => it.category).filter(Boolean) : [])])).map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setSelectedMenuCategory(cat)}
@@ -1835,10 +1844,12 @@ export default function AdminDashboardPage() {
                 })}
             </div>
           </div>
+          </TabErrorBoundary>
         )}
 
         {/* TAB 5: TABLES & QR STUDIO */}
         {activeTab === 'tables' && (
+          <TabErrorBoundary>
           <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-6 animate-fade-in">
             <div className="flex items-center justify-between pb-4 border-b border-stone-100">
               <div>
@@ -1929,10 +1940,12 @@ export default function AdminDashboardPage() {
               })}
             </div>
           </div>
+          </TabErrorBoundary>
         )}
 
         {/* TAB 6: PROMOS & COUPONS */}
         {activeTab === 'coupons' && (
+          <TabErrorBoundary>
           <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-6 animate-fade-in">
             <h3 className="font-serif font-bold text-base text-stone-900">
               Promotional Discount Coupons
@@ -2000,10 +2013,12 @@ export default function AdminDashboardPage() {
               ))}
             </div>
           </div>
+          </TabErrorBoundary>
         )}
 
         {/* TAB 7: DINER REVIEWS & AI SENTIMENT */}
         {activeTab === 'reviews' && (
+          <TabErrorBoundary>
           <div className="space-y-6 animate-fade-in">
             
             {/* Top Review Metrics & AI Intelligence Card */}
@@ -2024,7 +2039,7 @@ export default function AdminDashboardPage() {
                       </span>
                     </h3>
                     <p className="text-xs text-stone-500">
-                      Based on {reviewsAI?.totalReviews || feedbackList.length || 0} authenticated customer dining reviews
+                      Based on {reviewsAI?.totalReviews || (Array.isArray(feedbackList) ? feedbackList : []).length || 0} authenticated customer dining reviews
                     </p>
                   </div>
                 </div>
@@ -2081,12 +2096,12 @@ export default function AdminDashboardPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {(reviewsAI?.topPraises || reviewsAI?.praiseTags || [
+                    {(Array.isArray(reviewsAI?.topPraises) ? reviewsAI.topPraises : (Array.isArray(reviewsAI?.praiseTags) ? reviewsAI.praiseTags : [
                       { badge: '😋 Delicious Taste', topic: 'Food Taste & Flavors', count: 18, percent: 85 },
                       { badge: '⚡ Fast Kitchen Pacing', topic: 'Speed & Service Promptness', count: 12, percent: 60 },
                       { badge: '📱 Smooth QR Ordering', topic: 'Contactless QR Convenience', count: 9, percent: 45 },
                       { badge: '🔥 Hot & Fresh', topic: 'Freshness & Serving Temperature', count: 7, percent: 35 }
-                    ]).map((pt, idx) => (
+                    ])).map((pt, idx) => (
                       <div
                         key={idx}
                         className="px-2.5 py-1.5 rounded-xl bg-white border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-2 shadow-2xs"
@@ -2113,10 +2128,10 @@ export default function AdminDashboardPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {(reviewsAI?.commonProblems || reviewsAI?.criticalNotices || [
+                    {(Array.isArray(reviewsAI?.commonProblems) ? reviewsAI.commonProblems : (Array.isArray(reviewsAI?.criticalNotices) ? reviewsAI.criticalNotices : [
                       { badge: '⏳ Long Waiting Time', topic: 'Wait Times & Kitchen Delays', count: 2, severity: 'HIGH', advice: 'Streamline kitchen pass-through' },
                       { badge: '💧 Delayed Water Refills', topic: 'Water & Drink Refill Response', count: 1, severity: 'MEDIUM', advice: 'Floor runner check-in' }
-                    ]).map((cn, idx) => (
+                    ])).map((cn, idx) => (
                       <div
                         key={idx}
                         className="px-2.5 py-1.5 rounded-xl bg-white border border-rose-200 text-rose-900 text-xs font-bold flex items-center gap-2 shadow-2xs"
@@ -2275,6 +2290,7 @@ export default function AdminDashboardPage() {
             </div>
 
           </div>
+          </TabErrorBoundary>
         )}
 
         {/* TAB 8: DYNAMIC UPI PAYMENTS & SETTINGS */}
@@ -2572,7 +2588,7 @@ export default function AdminDashboardPage() {
                     Real-time payment notifications submitted by diners at their tables.
                   </p>
                 </div>
-                {incomingUpiPayments.length > 0 && (
+                {(Array.isArray(incomingUpiPayments) ? incomingUpiPayments : []).length > 0 && (
                   <button
                     onClick={() => setIncomingUpiPayments([])}
                     className="text-xs text-stone-500 hover:text-stone-800 underline cursor-pointer"
@@ -2582,7 +2598,7 @@ export default function AdminDashboardPage() {
                 )}
               </div>
 
-              {incomingUpiPayments.length === 0 ? (
+              {(Array.isArray(incomingUpiPayments) ? incomingUpiPayments : []).length === 0 ? (
                 <div className="py-12 text-center text-stone-400 bg-stone-50 rounded-2xl border border-dashed border-stone-200 space-y-1">
                   <Smartphone className="w-8 h-8 text-stone-300 mx-auto mb-2" />
                   <p className="text-sm font-semibold text-stone-600">No Pending UPI Settlements</p>
@@ -2592,7 +2608,7 @@ export default function AdminDashboardPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {(incomingUpiPayments || []).map((notice) => (
+                  {(Array.isArray(incomingUpiPayments) ? incomingUpiPayments : []).map((notice) => (
                     <div
                       key={notice.id}
                       className="p-4 rounded-2xl bg-emerald-50/40 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"

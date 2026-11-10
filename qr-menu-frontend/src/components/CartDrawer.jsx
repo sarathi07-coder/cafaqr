@@ -40,9 +40,15 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
     checkSession,
   } = useCart();
 
-  const [nameInput, setNameInput] = useState(customerName);
-  const [phoneInput, setPhoneInput] = useState(customerPhone);
-  const [consentCheck, setConsentCheck] = useState(consentGiven);
+  const [nameInput, setNameInput] = useState(customerName || '');
+  const [phoneInput, setPhoneInput] = useState(customerPhone || '');
+  const [consentCheck, setConsentCheck] = useState(Boolean(consentGiven));
+
+  React.useEffect(() => {
+    if (customerName) setNameInput(customerName);
+    if (customerPhone) setPhoneInput(customerPhone);
+    if (consentGiven !== undefined) setConsentCheck(Boolean(consentGiven));
+  }, [customerName, customerPhone, consentGiven]);
   
   // Coupon input
   const [couponCode, setCouponCode] = useState('');
@@ -58,7 +64,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
   const [isRemovingItem, setIsRemovingItem] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const itemsList = Object.values(cartItems);
+  const itemsList = Object.values(cartItems || {});
 
   // Active table order dietary calculation (Always called at top level for consistent hook counts)
   const activeDietaryStats = React.useMemo(() => {
@@ -69,6 +75,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
     let nonVegTotal = 0;
 
     activeOrder.items.forEach((it) => {
+      if (!it) return;
       const name = it.name || it.item_name || '';
       const isVeg = it.is_veg !== undefined
         ? Boolean(it.is_veg)
@@ -78,12 +85,13 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
             name.toLowerCase().includes('meat') ||
             name.toLowerCase().includes('egg') ||
             name.toLowerCase().includes('prawn'));
-      const lineTotal = parseFloat(it.line_total || (it.price_at_order * it.quantity) || 0);
+      const qty = Number(it.quantity) || 1;
+      const lineTotal = parseFloat(it.line_total || ((it.price_at_order || it.price || 0) * qty) || 0);
       if (isVeg) {
-        vegCount += it.quantity;
+        vegCount += qty;
         vegTotal += lineTotal;
       } else {
-        nonVegCount += it.quantity;
+        nonVegCount += qty;
         nonVegTotal += lineTotal;
       }
     });
@@ -255,10 +263,10 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
       {/* Backdrop */}
       <div
         onClick={onClose}
-        className="absolute inset-0 bg-stone-950/60 backdrop-blur-xs transition-opacity animate-fade-in"
+        className="absolute inset-0 bg-stone-950/75 backdrop-blur-sm transition-opacity animate-fade-in"
       />
 
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
         <div className="w-screen max-w-md bg-[#0E0C0A] border-l border-white/10 shadow-2xl flex flex-col justify-between text-stone-100">
           
           {/* Header */}
@@ -290,7 +298,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                   <div className="flex items-center gap-2">
                     <Receipt className="w-4 h-4 text-emerald-400" />
                     <span className="font-black text-white text-sm">
-                      Current Active Bill #{activeOrder.id?.slice(0, 8)}
+                      Current Active Bill #{String(activeOrder?.id || '').slice(0, 8)}
                     </span>
                   </div>
                   <span
@@ -423,12 +431,12 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                   )}
                   <div className="flex justify-between text-stone-400">
                     <span>GST (5%)</span>
-                    <span>₹{parseFloat(activeOrder.taxAmount || 0).toFixed(2)}</span>
+                    <span>₹{parseFloat(activeOrder?.taxAmount || activeOrder?.tax_amount || 0).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between font-black text-white text-sm pt-1 border-t border-white/10">
                     <span>Current Active Bill</span>
                     <span className="text-emerald-400">
-                      ₹{parseFloat(activeOrder.total || activeOrder.total_amount || 0).toFixed(2)}
+                      ₹{parseFloat(activeOrder?.total || activeOrder?.total_amount || 0).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -440,8 +448,8 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                     onClick={() => {
                       onClose();
                       onOpenUpiModal({
-                        amount: parseFloat(activeOrder.total || activeOrder.total_amount || 0),
-                        orderId: activeOrder.id,
+                        amount: parseFloat(activeOrder?.total || activeOrder?.total_amount || 0),
+                        orderId: activeOrder?.id,
                         tableNumber
                       });
                     }}
@@ -727,7 +735,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                 <div className="flex justify-between">
                   <span>5% GST Tax</span>
                   <span className="font-semibold text-white">
-                    ₹{parseFloat(activeOrder?.taxAmount || 0).toFixed(2)}
+                    ₹{parseFloat(activeOrder?.taxAmount || activeOrder?.tax_amount || 0).toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between text-base font-black text-white pt-2 border-t border-white/10 font-mono">
@@ -743,7 +751,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                   <div className="flex justify-between text-stone-500 pb-1 border-b border-white/5">
                     <span>Already Placed Bill</span>
                     <span className="font-medium text-stone-300 font-mono">
-                      ₹{parseFloat(activeOrder.total || 0).toFixed(2)}
+                      ₹{parseFloat(activeOrder?.total || activeOrder?.total_amount || 0).toFixed(2)}
                     </span>
                   </div>
                 )}

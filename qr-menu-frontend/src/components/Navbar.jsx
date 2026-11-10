@@ -1,5 +1,5 @@
 import React from 'react';
-import { BellRing, ChefHat, LayoutDashboard, Receipt, Phone, MapPin } from 'lucide-react';
+import { BellRing, ChefHat, LayoutDashboard, Receipt, Phone, ShoppingBag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import KrishLogo from './KrishLogo';
 
@@ -9,8 +9,10 @@ export default function Navbar({
   sessionLabel,
   customerName,
   hasActiveSession = false,
+  cartItemCount = 0,
   onViewBill,
-  onCallWaiter
+  onCallWaiter,
+  onOpenCart,
 }) {
   return (
     <header className="sticky top-0 z-40 bg-[#0B0B0D]/92 backdrop-blur-xl border-b border-white/10 shadow-[0_4px_25px_rgba(0,0,0,0.6)] transition-all">
@@ -43,14 +45,26 @@ export default function Navbar({
             <span className="font-mono">8760633322</span>
           </a>
 
-          {hasActiveSession && onViewBill && (
+          {/* Cart / Order Quick Access Button */}
+          {cartItemCount > 0 && onOpenCart && (
+            <button
+              type="button"
+              onClick={onOpenCart}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black krish-gradient-gold text-stone-950 transition active:scale-95 shadow-md cursor-pointer animate-pulse"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>View Order ({cartItemCount})</span>
+            </button>
+          )}
+
+          {hasActiveSession && onViewBill && cartItemCount === 0 && (
             <button
               type="button"
               onClick={onViewBill}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/30 transition active:scale-95 border border-emerald-500/40 cursor-pointer shadow-xs"
             >
               <Receipt className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Bill</span>
+              <span>View Order</span>
             </button>
           )}
 

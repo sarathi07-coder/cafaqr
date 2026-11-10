@@ -8,10 +8,20 @@ export default function ItemNotch({ onOpenCart, onOpenActiveBill, onOpenUpiModal
   // If nothing in cart and no active bill, do not show notch
   if (totalItemCount === 0 && !hasActiveSession) return null;
 
+  const handleBarClick = () => {
+    if (totalItemCount > 0 && onOpenCart) {
+      onOpenCart();
+    } else if (onOpenActiveBill) {
+      onOpenActiveBill();
+    }
+  };
+
   return (
     <div className="fixed bottom-4 inset-x-0 z-40 max-w-md mx-auto px-4 pointer-events-none transition-all duration-300">
-      <div className="pointer-events-auto bg-[#14110E]/95 backdrop-blur-2xl text-white rounded-2xl p-3 shadow-[0_16px_40px_rgba(0,0,0,0.85)] border border-white/15 flex items-center justify-between gap-2.5 animate-slide-up">
-        
+      <div
+        onClick={handleBarClick}
+        className="pointer-events-auto bg-[#14110E]/95 backdrop-blur-2xl text-white rounded-2xl p-3 shadow-[0_16px_40px_rgba(0,0,0,0.85)] border border-white/15 flex items-center justify-between gap-2.5 animate-slide-up cursor-pointer hover:border-amber-400/50 transition-all active:scale-[0.99] select-none"
+      >
         {/* Left Info: Active session or Cart Items */}
         <div className="flex items-center gap-2.5 pl-1 min-w-0">
           {totalItemCount > 0 ? (
@@ -36,7 +46,7 @@ export default function ItemNotch({ onOpenCart, onOpenActiveBill, onOpenUpiModal
                   )}
                 </div>
                 <p className="text-base font-extrabold text-white tracking-tight leading-none mt-0.5 font-mono tabular-nums">
-                  ₹{grandTotal.toFixed(2)}
+                  ₹{Number(grandTotal || 0).toFixed(2)}
                   <span className="text-[10px] text-stone-400 font-sans font-normal ml-1">(inc. 5% GST)</span>
                 </p>
               </div>
@@ -66,7 +76,10 @@ export default function ItemNotch({ onOpenCart, onOpenActiveBill, onOpenUpiModal
         {totalItemCount > 0 ? (
           <button
             type="button"
-            onClick={onOpenCart}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onOpenCart) onOpenCart();
+            }}
             className="flex items-center gap-1.5 krish-gradient-gold hover:brightness-110 active:scale-95 text-stone-950 font-black px-4 py-2.5 rounded-xl text-xs sm:text-sm transition-all shadow-[0_4px_16px_rgba(255,196,0,0.35)] cursor-pointer shrink-0"
           >
             <span>View Order</span>
@@ -77,13 +90,14 @@ export default function ItemNotch({ onOpenCart, onOpenActiveBill, onOpenUpiModal
             {onOpenUpiModal && (
               <button
                 type="button"
-                onClick={() =>
+                onClick={(e) => {
+                  e.stopPropagation();
                   onOpenUpiModal({
                     amount: parseFloat(activeOrder?.total || activeOrder?.total_amount || 0),
                     orderId: activeOrder?.id
-                  })
-                }
-                className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold px-3 py-2.5 rounded-xl text-xs transition-all shadow-[0_4px_16px_rgba(16,185,129,0.3)] cursor-pointer"
+                  });
+                }}
+                className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold px-3 py-2 rounded-xl text-xs transition-all shadow-[0_4px_16px_rgba(16,185,129,0.3)] cursor-pointer"
                 title="Pay Bill via UPI"
               >
                 <Smartphone className="w-3.5 h-3.5" />
@@ -92,11 +106,14 @@ export default function ItemNotch({ onOpenCart, onOpenActiveBill, onOpenUpiModal
             )}
             <button
               type="button"
-              onClick={onOpenActiveBill}
-              className="flex items-center gap-1 bg-stone-900/90 hover:bg-stone-800 active:scale-95 text-stone-200 font-semibold px-3 py-2.5 rounded-xl text-xs transition-all border border-white/10 cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onOpenActiveBill) onOpenActiveBill();
+              }}
+              className="flex items-center gap-1 krish-gradient-gold hover:brightness-110 active:scale-95 text-stone-950 font-black px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer shadow-md"
             >
-              <span>Bill</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <span>View Order</span>
+              <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
             </button>
           </div>
         )}
