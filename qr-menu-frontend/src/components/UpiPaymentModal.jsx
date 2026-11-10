@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
+import SafeQRCode from './SafeQRCode';
 import {
   X,
   Copy,
@@ -255,11 +255,10 @@ export default function UpiPaymentModal({
               <div className="bg-white rounded-2xl border-2 border-dashed border-stone-200 p-4 text-center shadow-xs">
                 <div className="inline-block p-3 bg-white rounded-2xl shadow-sm border border-stone-100">
                   <QRErrorBoundary value={upiUri}>
-                    <QRCodeSVG
+                    <SafeQRCode
                       value={upiUri}
                       size={190}
                       level="M"
-                      includeMargin={false}
                       className="mx-auto"
                     />
                   </QRErrorBoundary>

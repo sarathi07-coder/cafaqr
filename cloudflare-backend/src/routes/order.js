@@ -449,11 +449,44 @@ order.post('/:id/items', async (c) => {
       orderId,
       itemsAdded: addedCount,
       newTotal: totals.total,
+      total: totals.total,
       totals,
+      order: {
+        id: orderId,
+        total: totals.total,
+        subtotal: totals.subtotal,
+      },
     });
   } catch (err) {
     console.error('Add items error:', err);
     return c.json({ error: 'Failed to add items' }, 500);
+  }
+});
+
+// PUT /api/order/:id/notes (Update Cooking Notes)
+order.put('/:id/notes', async (c) => {
+  const orderId = c.req.param('id');
+  try {
+    const { notes } = await c.req.json().catch(() => ({}));
+    const ord = await c.env.DB.prepare('SELECT id, status FROM orders WHERE id = ?').bind(orderId).first();
+    if (!ord) return c.json({ error: 'Order not found' }, 404);
+
+    if (['SERVED', 'PAID', 'CANCELLED'].includes(ord.status)) {
+      return c.json({ error: `Cannot modify notes when order is ${ord.status}` }, 400);
+    }
+
+    await c.env.DB.prepare("UPDATE orders SET notes = ?, updated_at = datetime('now') WHERE id = ?")
+      .bind(notes || '', orderId)
+      .run();
+
+    return c.json({
+      success: true,
+      message: 'Cooking notes updated successfully',
+      notes,
+    });
+  } catch (err) {
+    console.error('Update notes error:', err);
+    return c.json({ error: 'Database error' }, 500);
   }
 });
 
@@ -791,6 +824,62 @@ order.put('/table/:tableId/settle-all', async (c) => {
     });
   } catch (err) {
     console.error('Settle all error:', err);
+    return c.json({ error: 'Database error' }, 500);
+  }
+});
+
+// GET /api/order/:id/split (Equal Bill Split)
+order.get('/:id/split', async (c) => {
+  const orderId = c.req.param('id');
+  const ways = parseInt(c.req.query('ways') || '2', 10);
+
+  if (ways < 2 || ways > 20) {
+    return c.json({ error: 'Bill can be split between 2 and 20 ways' }, 400);
+  }
+
+  try {
+    const ord = await c.env.DB.prepare(
+      `SELECT o.id, o.table_id, o.subtotal, o.discount_amount, o.coupon_code, o.tax_percentage, o.tax_amount, o.total,
+              r.currency, t.number AS table_number
+       FROM orders o
+       JOIN restaurants r ON o.restaurant_id = r.id
+       LEFT JOIN tables t ON o.table_id = t.id
+       WHERE o.id = ?`
+    ).bind(orderId).first();
+
+    if (!ord) return c.json({ error: 'Order not found' }, 404);
+
+    const totalAmount = Number(ord.total || 0);
+    const currency = ord.currency || '₹';
+
+    const totalPaise = Math.round(totalAmount * 100);
+    const baseSharePaise = Math.floor(totalPaise / ways);
+    const remainderPaise = totalPaise % ways;
+
+    const shares = [];
+    for (let i = 0; i < ways; i++) {
+      const sharePaise = baseSharePaise + (i < remainderPaise ? 1 : 0);
+      shares.push({
+        person: i + 1,
+        amount: parseFloat((sharePaise / 100).toFixed(2)),
+      });
+    }
+
+    return c.json({
+      orderId,
+      tableNumber: ord.table_number,
+      currency,
+      totalAmount,
+      subtotal: Number(ord.subtotal || 0),
+      discountAmount: Number(ord.discount_amount || 0),
+      taxAmount: Number(ord.tax_amount || 0),
+      splitWays: ways,
+      perPerson: shares[0].amount,
+      perPersonAmount: shares[0].amount,
+      shares,
+    });
+  } catch (err) {
+    console.error('Split bill error:', err);
     return c.json({ error: 'Database error' }, 500);
   }
 });

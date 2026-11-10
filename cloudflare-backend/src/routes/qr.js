@@ -28,9 +28,31 @@ async function renderSvgString(text, options = {}) {
   });
 }
 
-// GET /api/qr/restaurant/:restaurantId/bulk (Batch Table Stands / QR Generator)
-qr.get('/restaurant/:restaurantId/bulk', async (c) => {
-  const restaurantId = c.req.param('restaurantId');
+// GET /api/qr/generate (Dynamic text/data to SVG QR Code)
+qr.get('/generate', async (c) => {
+  const text = c.req.query('text') || c.req.query('data') || '';
+  if (!text) return c.text('Missing text query parameter', 400);
+
+  const dark = c.req.query('dark') || '#000000';
+  const light = c.req.query('light') || '#ffffff';
+
+  try {
+    const svg = await renderSvgString(text, { dark, light });
+    return new Response(svg, {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/svg+xml; charset=utf-8',
+        'Cache-Control': 'public, max-age=86400',
+      },
+    });
+  } catch (err) {
+    return c.text('Failed to generate QR: ' + err.message, 500);
+  }
+});
+
+// Bulk & Batch Table Stands / QR Generator Handler
+const bulkQrHandler = async (c) => {
+  const restaurantId = c.req.param('restaurantId') || c.req.query('restaurantId') || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
   const host = c.req.header('host') || 'cafaqr.p7404467.workers.dev';
   const proto = c.req.header('x-forwarded-proto') || 'https';
 
@@ -88,7 +110,12 @@ qr.get('/restaurant/:restaurantId/bulk', async (c) => {
     console.error('Bulk QR generation error:', err);
     return c.json({ error: 'Failed to generate bulk QR codes: ' + err.message }, 500);
   }
-});
+};
+
+qr.get('/restaurant/:restaurantId/bulk', bulkQrHandler);
+qr.get('/batch/:restaurantId', bulkQrHandler);
+qr.get('/batch', bulkQrHandler);
+qr.get('/bulk', bulkQrHandler);
 
 // GET /api/qr/:tableId (Individual Table QR Code Graphic)
 qr.get('/:tableId', async (c) => {
@@ -136,3 +163,4 @@ qr.get('/:tableId', async (c) => {
 });
 
 export default qr;
+

@@ -612,12 +612,14 @@ export default function CustomerMenuPage() {
       />
 
       {/* Cart & Ordering Drawer */}
-      <CartDrawer
-        isOpen={isCartOpen}
-        onClose={() => setIsCartOpen(false)}
-        onOrderSuccess={(msg) => setToastMessage(msg)}
-        onOpenUpiModal={handleOpenUpiModal}
-      />
+      <SafeModalBoundary>
+        <CartDrawer
+          isOpen={isCartOpen}
+          onClose={() => setIsCartOpen(false)}
+          onOrderSuccess={(msg) => setToastMessage(msg)}
+          onOpenUpiModal={handleOpenUpiModal}
+        />
+      </SafeModalBoundary>
 
       {/* Dynamic UPI Payment Modal */}
       <SafeModalBoundary>
@@ -637,26 +639,30 @@ export default function CustomerMenuPage() {
       </SafeModalBoundary>
 
       {/* Service Request / Call Waiter Modal */}
-      <ServiceCallModal
-        isOpen={isServiceModalOpen}
-        onClose={() => setIsServiceModalOpen(false)}
-        tableId={tableId || ''}
-        tableNumber={tableNumber || '1'}
-        sessionToken={sessionToken || ''}
-        sessionLabel={sessionLabel || 'Customer 1'}
-        customerName={customerName || ''}
-        onCallSuccess={(msg) => setToastMessage(msg)}
-      />
+      <SafeModalBoundary>
+        <ServiceCallModal
+          isOpen={isServiceModalOpen}
+          onClose={() => setIsServiceModalOpen(false)}
+          tableId={tableId || ''}
+          tableNumber={tableNumber || '1'}
+          sessionToken={sessionToken || ''}
+          sessionLabel={sessionLabel || 'Customer 1'}
+          customerName={customerName || ''}
+          onCallSuccess={(msg) => setToastMessage(msg)}
+        />
+      </SafeModalBoundary>
 
       {/* Customer 5-Star Feedback Modal */}
-      <FeedbackModal
-        isOpen={isFeedbackModalOpen}
-        onClose={() => setIsFeedbackModalOpen(false)}
-        orderId={lastCompletedOrderId || activeOrder?.id}
-        tableId={tableId}
-        restaurantId={restaurantId}
-        onSubmitSuccess={(msg) => setToastMessage(msg)}
-      />
+      <SafeModalBoundary>
+        <FeedbackModal
+          isOpen={isFeedbackModalOpen}
+          onClose={() => setIsFeedbackModalOpen(false)}
+          orderId={lastCompletedOrderId || activeOrder?.id}
+          tableId={tableId}
+          restaurantId={restaurantId}
+          onSubmitSuccess={(msg) => setToastMessage(msg)}
+        />
+      </SafeModalBoundary>
     </div>
   );
 }

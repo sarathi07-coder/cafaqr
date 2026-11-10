@@ -4,7 +4,7 @@
   "private": true,
   "description": "Full-stack automated restaurant QR code ordering system",
   "scripts": {
-    "build": "cp qr-menu-frontend/index.html qr-menu-frontend/public/200.html && npm --prefix qr-menu-frontend install && npm --prefix qr-menu-frontend run build && rm -rf dist && cp -r qr-menu-frontend/dist ./dist && rm -f ./dist/_redirects",
+    "build": "npm --prefix qr-menu-frontend install && npm --prefix qr-menu-frontend run build && rm -rf dist && cp -r qr-menu-frontend/dist ./dist && rm -f ./dist/_redirects ./dist/200.html",
     "dev": "concurrently \"npm --prefix qr-menu-backend run dev\" \"npm --prefix qr-menu-frontend run dev\"",
     "frontend": "npm --prefix qr-menu-frontend run dev",
     "backend": "npm --prefix qr-menu-backend run dev"

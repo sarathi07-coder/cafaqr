@@ -46,7 +46,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import SafeQRCode from '../components/SafeQRCode';
 import { api } from '../api';
 import { socket } from '../socket';
 
@@ -2459,11 +2459,10 @@ export default function AdminDashboardPage() {
                   return (
                     <div className="p-4 bg-stone-50 rounded-2xl border-2 border-dashed border-stone-200 text-center space-y-3">
                       <div className="inline-block p-3 bg-white rounded-2xl shadow-sm border border-stone-200">
-                        <QRCodeSVG
+                        <SafeQRCode
                           value={simUri}
                           size={180}
                           level="M"
-                          includeMargin={false}
                           className="mx-auto"
                         />
                       </div>
