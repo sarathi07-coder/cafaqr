@@ -685,4 +685,114 @@ order.post('/feedback/submit', async (c) => {
   }
 });
 
+// PUT /api/order/:id/dismiss (Cashier / Admin settle individual diner order)
+order.put('/:id/dismiss', async (c) => {
+  const orderId = c.req.param('id');
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const paymentMethod = body.paymentMethod || body.payment_method || 'CASH';
+
+    const ord = await c.env.DB.prepare(
+      'SELECT id, table_id, session_token, session_label, subtotal, tax_amount, total FROM orders WHERE id = ?'
+    )
+      .bind(orderId)
+      .first();
+
+    if (!ord) return c.json({ error: 'Order not found' }, 404);
+
+    await c.env.DB.prepare(
+      `UPDATE orders SET status = 'PAID', payment_method = ?, updated_at = datetime('now') WHERE id = ?`
+    )
+      .bind(paymentMethod, orderId)
+      .run();
+
+    if (ord.session_token) {
+      await c.env.DB.prepare(
+        `UPDATE customer_sessions SET is_active = 0, last_active = datetime('now') WHERE session_token = ?`
+      )
+        .bind(ord.session_token)
+        .run();
+    }
+
+    const remainingRes = await c.env.DB.prepare(
+      `SELECT COUNT(*) as count FROM orders WHERE table_id = ? AND status NOT IN ('PAID', 'CANCELLED')`
+    )
+      .bind(ord.table_id)
+      .first();
+
+    const remainingCount = Number(remainingRes?.count || 0);
+
+    return c.json({
+      message: `Order for ${ord.session_label || 'Customer'} marked as PAID.`,
+      order: {
+        ...ord,
+        status: 'PAID',
+        paymentMethod,
+        remainingActiveTableOrders: remainingCount,
+      },
+    });
+  } catch (err) {
+    console.error('Dismiss order error:', err);
+    return c.json({ error: 'Database error' }, 500);
+  }
+});
+
+// PUT /api/order/table/:tableId/settle-all (Settle entire table combined bill)
+order.put('/table/:tableId/settle-all', async (c) => {
+  const tableId = c.req.param('tableId');
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const paymentMethod = body.paymentMethod || body.payment_method || 'CASH';
+
+    const activeOrdersRes = await c.env.DB.prepare(
+      `SELECT o.id, o.session_token, o.session_label, o.subtotal, o.tax_amount, o.total, t.number AS table_number
+       FROM orders o
+       JOIN tables t ON o.table_id = t.id
+       WHERE o.table_id = ? AND o.status NOT IN ('PAID', 'CANCELLED')`
+    )
+      .bind(tableId)
+      .all();
+
+    const activeOrders = activeOrdersRes.results || [];
+    if (activeOrders.length === 0) {
+      return c.json({ error: 'No active unsettled orders found for this table' }, 400);
+    }
+
+    let combinedSubtotal = 0;
+    let combinedTax = 0;
+    let combinedTotal = 0;
+
+    for (const ord of activeOrders) {
+      combinedSubtotal += Number(ord.subtotal || 0);
+      combinedTax += Number(ord.tax_amount || 0);
+      combinedTotal += Number(ord.total || 0);
+
+      await c.env.DB.prepare(
+        `UPDATE orders SET status = 'PAID', payment_method = ?, updated_at = datetime('now') WHERE id = ?`
+      )
+        .bind(paymentMethod, ord.id)
+        .run();
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE customer_sessions SET is_active = 0, last_active = datetime('now') WHERE table_id = ?`
+    )
+      .bind(tableId)
+      .run();
+
+    return c.json({
+      message: `Table #${activeOrders[0]?.table_number || ''} fully settled and released.`,
+      ordersSettledCount: activeOrders.length,
+      combinedSubtotal,
+      combinedTax,
+      combinedTotal,
+      tableId,
+      status: 'PAID',
+    });
+  } catch (err) {
+    console.error('Settle all error:', err);
+    return c.json({ error: 'Database error' }, 500);
+  }
+});
+
 export default order;

@@ -5,6 +5,7 @@ import menu from './routes/menu.js';
 import order from './routes/order.js';
 import kitchen from './routes/kitchen.js';
 import admin from './routes/admin.js';
+import qr from './routes/qr.js';
 
 const app = new Hono();
 
@@ -80,5 +81,6 @@ app.route('/api/menu', menu);
 app.route('/api/order', order);
 app.route('/api/kitchen', kitchen);
 app.route('/api/admin', admin);
+app.route('/api/qr', qr);
 
 export default app;
