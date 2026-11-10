@@ -124,6 +124,7 @@ export default function CustomerMenuPage() {
     checkSession,
     hasActiveSession,
     activeOrder,
+    totalItemCount = 0,
   } = useCart();
 
   const [menuItems, setMenuItems] = useState([]);
