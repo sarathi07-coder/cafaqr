@@ -66,3 +66,4 @@ testSyncModule().catch((err) => {
   console.error('❌ Module 8 test failed:', err);
   process.exit(1);
 });
+

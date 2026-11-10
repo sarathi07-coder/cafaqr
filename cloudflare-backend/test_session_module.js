@@ -79,3 +79,4 @@ testSessionModule().catch((err) => {
   console.error('❌ Module 4 test failed:', err);
   process.exit(1);
 });
+

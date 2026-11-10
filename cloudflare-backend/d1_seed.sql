@@ -45,3 +45,4 @@ INSERT OR REPLACE INTO menu_items (id, restaurant_id, name, description, price, 
 INSERT OR REPLACE INTO coupons (id, restaurant_id, code, discount_type, discount_value, min_order_amount, max_discount_amount, is_active) VALUES
 ('c1000000-0000-0000-0000-000000000001', 'db4ed920-3d20-420a-9f54-99d3c0b48a08', 'WELCOME10', 'PERCENTAGE', 10.0, 300.0, 150.0, 1),
 ('c1000000-0000-0000-0000-000000000002', 'db4ed920-3d20-420a-9f54-99d3c0b48a08', 'FLAT50', 'FLAT', 50.0, 250.0, NULL, 1);
+

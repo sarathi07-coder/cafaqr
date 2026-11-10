@@ -152,3 +152,4 @@ CREATE INDEX IF NOT EXISTS idx_menu_items_available ON menu_items(available);
 CREATE INDEX IF NOT EXISTS idx_feedback_restaurant ON order_feedback(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_service_requests_table ON service_requests(table_id);
 CREATE INDEX IF NOT EXISTS idx_coupons_restaurant ON coupons(restaurant_id);
+

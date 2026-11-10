@@ -97,3 +97,4 @@ testOrderPlacementModule().catch((err) => {
   console.error('❌ Module 5 test failed:', err);
   process.exit(1);
 });
+

@@ -52,3 +52,4 @@ testMenuModule().catch((err) => {
   console.error('❌ Module 3 test failed:', err);
   process.exit(1);
 });
+

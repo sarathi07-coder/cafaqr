@@ -71,3 +71,4 @@ testKitchenModule().catch((err) => {
   console.error('❌ Module 6 test failed:', err);
   process.exit(1);
 });
+

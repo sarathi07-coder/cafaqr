@@ -95,3 +95,4 @@ menu.get('/:restaurantId', async (c) => {
 });
 
 export default menu;
+
