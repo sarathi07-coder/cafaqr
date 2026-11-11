@@ -1,5 +1,6 @@
 // Admin Portal Router for Cloudflare Workers & D1
 import { Hono } from 'hono';
+import { toUtcIso } from '../utils/time.js';
 
 const admin = new Hono();
 
@@ -84,6 +85,8 @@ admin.get('/orders', async (c) => {
 
       populated.push({
         ...ord,
+        created_at: toUtcIso(ord.created_at),
+        updated_at: toUtcIso(ord.updated_at),
         items: itemsRes.results || [],
       });
     }
@@ -146,7 +149,7 @@ admin.get('/tables/active-grouped', async (c) => {
         total: ord.total,
         items: ord.items || [],
         notes: ord.notes,
-        createdAt: ord.created_at,
+        createdAt: toUtcIso(ord.created_at),
       };
 
       tableMap[ord.table_id].combinedBill += Number(ord.total || 0);
@@ -565,7 +568,12 @@ admin.get('/feedback', async (c) => {
       ).all();
     }
 
-    return c.json(res.results || []);
+    return c.json(
+      (res.results || []).map((row) => ({
+        ...row,
+        created_at: toUtcIso(row.created_at),
+      }))
+    );
   } catch (err) {
     console.error('Fetch feedback error:', err);
     return c.json({ error: 'Database error' }, 500);
@@ -619,7 +627,10 @@ admin.get('/analytics/overview', async (c) => {
         total_orders: paidOrders,
       },
       top_items: topItemsRes.results || [],
-      recent_orders: recentOrdersRes.results || [],
+      recent_orders: (recentOrdersRes.results || []).map((ord) => ({
+        ...ord,
+        created_at: toUtcIso(ord.created_at),
+      })),
     });
   } catch (err) {
     console.error('Analytics overview error:', err);
@@ -921,7 +932,10 @@ admin.get('/analytics/reviews-ai', async (c) => {
        LIMIT 50`
     ).bind(restaurantId).all();
 
-    const reviews = feedbackRes.results || [];
+    const reviews = (feedbackRes.results || []).map((r) => ({
+      ...r,
+      created_at: toUtcIso(r.created_at),
+    }));
     const totalReviews = reviews.length;
 
     let sumRating = 0;
@@ -1141,7 +1155,7 @@ admin.get('/reports/sales/csv', async (c) => {
 
     const csvLines = [headers.join(',')];
     for (const r of rows) {
-      const dt = new Date(r.created_at || Date.now());
+      const dt = new Date(toUtcIso(r.created_at) || Date.now());
       const dateStr = dt.toISOString().split('T')[0];
       const timeStr = dt.toTimeString().split(' ')[0];
 
@@ -1201,7 +1215,13 @@ admin.get('/service-requests', async (c) => {
       ).all();
     }
 
-    return c.json(res.results || []);
+    return c.json(
+      (res.results || []).map((row) => ({
+        ...row,
+        created_at: toUtcIso(row.created_at),
+        resolved_at: toUtcIso(row.resolved_at),
+      }))
+    );
   } catch (err) {
     console.error('Fetch service requests error:', err);
     return c.json({ error: 'Database error' }, 500);

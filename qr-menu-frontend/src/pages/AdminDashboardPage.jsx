@@ -51,6 +51,7 @@ import SafeQRCode from '../components/SafeQRCode';
 import KrishLogo from '../components/KrishLogo';
 import { api } from '../api';
 import { socket } from '../socket';
+import { parseUtcTimestamp } from '../utils/time';
 
 class TabErrorBoundary extends React.Component {
   constructor(props) {
@@ -2273,7 +2274,7 @@ export default function AdminDashboardPage() {
                           </div>
 
                           <span className="text-[11px] text-stone-400">
-                            {new Date(fb.created_at).toLocaleDateString()} &bull; {new Date(fb.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {parseUtcTimestamp(fb.created_at).toLocaleDateString()} &bull; {parseUtcTimestamp(fb.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
 
@@ -2632,7 +2633,7 @@ export default function AdminDashboardPage() {
                           <p className="text-xs text-stone-500 mt-0.5">
                             {notice.customerName ? `Diner: ${notice.customerName} &bull; ` : ''}
                             {notice.utr ? `UTR: ${notice.utr} &bull; ` : 'Direct Intent &bull; '}
-                            {notice.timestamp ? new Date(notice.timestamp).toLocaleTimeString() : 'Just now'}
+                            {notice.timestamp ? parseUtcTimestamp(notice.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
                           </p>
                         </div>
                       </div>

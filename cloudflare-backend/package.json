@@ -8,7 +8,7 @@
     "test": "node test_master_cloudflare_e2e.js",
     "test:all": "node test_d1_schema.js && node test_worker_health.js && node test_menu_module.js && node test_session_module.js && node test_order_placement.js && node test_kitchen_module.js && node test_upi_module.js && node test_sync_module.js && node test_admin_analytics.js && node test_master_cloudflare_e2e.js",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --config wrangler.toml",
     "db:create": "wrangler d1 create cafaqr-production-db",
     "db:seed:local": "wrangler d1 execute cafaqr-production-db --local --file=./schema.sql && wrangler d1 execute cafaqr-production-db --local --file=./d1_seed.sql",
     "db:seed:remote": "wrangler d1 execute cafaqr-production-db --remote --file=./schema.sql && wrangler d1 execute cafaqr-production-db --remote --file=./d1_seed.sql"

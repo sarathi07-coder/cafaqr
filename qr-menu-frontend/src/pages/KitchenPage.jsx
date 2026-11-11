@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import KrishLogo from '../components/KrishLogo';
 import { api } from '../api';
 import { socket } from '../socket';
+import { parseUtcTimestamp } from '../utils/time';
 
 export default function KitchenPage() {
   const [tickets, setTickets] = useState([]);
@@ -332,9 +333,11 @@ export default function KitchenPage() {
 
 // Individual KDS Ticket Component
 function KDSTicketCard({ ticket, onAdvance, nextLabel, nextColor, isCompleted }) {
-  // Elapsed timer computation
-  const createdAt = new Date(ticket.created_at || Date.now());
-  const elapsedMinutes = Math.floor((Date.now() - createdAt.getTime()) / 60000);
+  // Elapsed timer computation (handles SQLite UTC timestamps reliably in local timezones)
+  const createdAt = parseUtcTimestamp(ticket.created_at);
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / 60000));
+  const customerName = (ticket.customer_name || ticket.customerName || '').trim();
+  const sessionLabel = ticket.session_label || ticket.sessionLabel || 'Customer';
 
   const getUrgencyBadge = () => {
     if (elapsedMinutes >= 20) {
@@ -375,10 +378,9 @@ function KDSTicketCard({ ticket, onAdvance, nextLabel, nextColor, isCompleted })
             {/* Customer Session Identifier */}
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               <span className="text-[11px] font-bold text-sky-300 bg-sky-500/15 px-2 py-0.5 rounded-md border border-sky-500/25">
-                {ticket.session_label || ticket.sessionLabel || 'Customer'}
-                {ticket.customer_name ? ` (${ticket.customer_name})` : ''}
+                {customerName ? `${customerName} • ${sessionLabel}` : sessionLabel}
               </span>
-              <span className="text-[10px] text-stone-500 font-mono">
+              <span className="text-[10px] text-stone-400 font-mono">
                 {createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>

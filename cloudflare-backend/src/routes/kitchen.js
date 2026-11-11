@@ -1,5 +1,6 @@
 // Kitchen Display System (KDS) Router for Cloudflare Workers & D1
 import { Hono } from 'hono';
+import { toUtcIso } from '../utils/time.js';
 
 const kitchen = new Hono();
 
@@ -10,9 +11,14 @@ const fetchActiveTicketsHandler = async (c) => {
   try {
     const ordersRes = await c.env.DB.prepare(
       `SELECT o.id, o.restaurant_id, o.table_id, o.status, o.notes, o.created_at, o.updated_at,
-              o.session_token, o.session_label, t.number as table_number
+              o.session_token, o.session_label, t.number as table_number,
+              COALESCE(c.name, cs_c.name) as customer_name,
+              COALESCE(c.phone, cs_c.phone) as customer_phone
        FROM orders o
        JOIN tables t ON o.table_id = t.id
+       LEFT JOIN customers c ON o.customer_id = c.id
+       LEFT JOIN customer_sessions cs ON o.session_token = cs.session_token
+       LEFT JOIN customers cs_c ON cs.customer_id = cs_c.id
        WHERE o.restaurant_id = ?
          AND o.status NOT IN ('PAID', 'CANCELLED')
          AND (
@@ -47,9 +53,11 @@ const fetchActiveTicketsHandler = async (c) => {
       // Only show tickets that have cooking items
       if (items.length === 0) continue;
 
-      // Calculate elapsed minutes
-      const createdAt = new Date(ord.created_at || Date.now());
-      const elapsedMinutes = Math.floor((Date.now() - createdAt.getTime()) / 60000);
+      // Normalize SQLite UTC timestamps to ISO-8601 Z so browsers in any timezone calculate elapsed time accurately
+      const createdIso = toUtcIso(ord.created_at) || new Date().toISOString();
+      const updatedIso = toUtcIso(ord.updated_at) || createdIso;
+      const createdAt = new Date(createdIso);
+      const elapsedMinutes = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / 60000));
 
       tickets.push({
         ...ord,
@@ -57,7 +65,11 @@ const fetchActiveTicketsHandler = async (c) => {
         order_id: ord.id,
         table_number: ord.table_number,
         session_label: ord.session_label || 'Customer',
-        elapsed_minutes: Math.max(0, elapsedMinutes),
+        customer_name: ord.customer_name || null,
+        customer_phone: ord.customer_phone || null,
+        created_at: createdIso,
+        updated_at: updatedIso,
+        elapsed_minutes: elapsedMinutes,
         items,
       });
     }

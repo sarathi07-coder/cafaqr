@@ -1,5 +1,6 @@
 // Order & Session Router for Cloudflare Workers & D1
 import { Hono } from 'hono';
+import { toUtcIso } from '../utils/time.js';
 
 const order = new Hono();
 
@@ -65,9 +66,11 @@ order.post('/session/init', async (c) => {
     let existingSession = null;
     if (sessionToken) {
       existingSession = await c.env.DB.prepare(
-        `SELECT id, session_token, session_label, is_active
-         FROM customer_sessions
-         WHERE session_token = ? AND table_id = ? AND is_active = 1`
+        `SELECT cs.id, cs.session_token, cs.session_label, cs.is_active, cs.customer_id,
+                c.name as customer_name, c.phone as customer_phone, c.consent_given
+         FROM customer_sessions cs
+         LEFT JOIN customers c ON cs.customer_id = c.id
+         WHERE cs.session_token = ? AND cs.table_id = ? AND cs.is_active = 1`
       )
         .bind(sessionToken, tableId)
         .first();
@@ -76,10 +79,12 @@ order.post('/session/init', async (c) => {
     if (existingSession) {
       // Find any active order for this session
       const activeOrder = await c.env.DB.prepare(
-        `SELECT id, status, subtotal, tax_percentage, tax_amount, total, created_at, notes
-         FROM orders
-         WHERE (session_token = ? OR session_id = ?) AND status NOT IN ('PAID', 'CANCELLED')
-         ORDER BY created_at DESC LIMIT 1`
+        `SELECT o.id, o.status, o.subtotal, o.tax_percentage, o.tax_amount, o.total, o.created_at, o.notes,
+                c.name as customer_name, c.phone as customer_phone
+         FROM orders o
+         LEFT JOIN customers c ON o.customer_id = c.id
+         WHERE (o.session_token = ? OR o.session_id = ?) AND o.status NOT IN ('PAID', 'CANCELLED')
+         ORDER BY o.created_at DESC LIMIT 1`
       )
         .bind(existingSession.session_token, existingSession.id)
         .first();
@@ -98,13 +103,27 @@ order.post('/session/init', async (c) => {
         items = itemsRes.results || [];
       }
 
+      const resolvedCustName = activeOrder?.customer_name || existingSession.customer_name || null;
+      const resolvedCustPhone = activeOrder?.customer_phone || existingSession.customer_phone || null;
+
       return c.json({
         sessionToken: existingSession.session_token,
         sessionLabel: existingSession.session_label,
         sessionId: existingSession.id,
+        customer: resolvedCustName ? {
+          name: resolvedCustName,
+          phone: resolvedCustPhone,
+          consentGiven: Boolean(existingSession.consent_given ?? 1),
+        } : null,
         isNew: false,
         hasActiveOrder: Boolean(activeOrder),
-        order: activeOrder ? { ...activeOrder, items } : null,
+        order: activeOrder ? {
+          ...activeOrder,
+          created_at: toUtcIso(activeOrder.created_at),
+          customer_name: resolvedCustName,
+          customer: resolvedCustName ? { name: resolvedCustName, phone: resolvedCustPhone } : null,
+          items,
+        } : null,
         table,
       });
     }
@@ -241,7 +260,12 @@ order.get('/table/:tableId/session', async (c) => {
     return c.json({
       table,
       hasActiveOrder: Boolean(activeOrder),
-      order: activeOrder ? { ...activeOrder, items } : null,
+      order: activeOrder ? {
+        ...activeOrder,
+        created_at: toUtcIso(activeOrder.created_at),
+        updated_at: toUtcIso(activeOrder.updated_at),
+        items,
+      } : null,
     });
   } catch (err) {
     console.error('Table session lookup error:', err);
@@ -344,6 +368,12 @@ order.post('/', async (c) => {
       if (sess) {
         sId = sess.id;
         sLabel = sess.session_label;
+        await c.env.DB.prepare("UPDATE customer_sessions SET customer_id = ?, last_active = datetime('now') WHERE id = ?").bind(customerId, sId).run();
+      } else {
+        sToken = `cs_${generateUUID()}`;
+        const countRow = await c.env.DB.prepare('SELECT COUNT(*) as count FROM customer_sessions WHERE table_id = ? AND is_active = 1').bind(tableId).first();
+        sLabel = `Customer ${Number(countRow?.count || 0) + 1}`;
+        await c.env.DB.prepare('INSERT INTO customer_sessions (id, session_token, table_id, restaurant_id, customer_id, session_label, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)').bind(sId, sToken, tableId, restaurantId, customerId, sLabel).run();
       }
     } else {
       sToken = `cs_${generateUUID()}`;
@@ -366,8 +396,8 @@ order.post('/', async (c) => {
       if (notes) {
         await c.env.DB.prepare("UPDATE orders SET notes = COALESCE(notes || '; ', '') || ? WHERE id = ?").bind(notes, orderId).run();
       }
-      // Re-alert kitchen with PENDING status when new items are added to active running order
-      await c.env.DB.prepare("UPDATE orders SET status = 'PENDING', updated_at = datetime('now') WHERE id = ?").bind(orderId).run();
+      // Re-alert kitchen with PENDING status and ensure customer link stays updated when new items are added
+      await c.env.DB.prepare("UPDATE orders SET customer_id = COALESCE(customer_id, ?), status = 'PENDING', updated_at = datetime('now') WHERE id = ?").bind(customerId, orderId).run();
     }
 
     // Insert items
@@ -604,8 +634,14 @@ order.post('/table/:tableId/call-waiter', async (c) => {
     let cName = customerName || 'Diner';
 
     if (sessionToken) {
-      const sess = await c.env.DB.prepare('SELECT session_label FROM customer_sessions WHERE session_token = ?').bind(sessionToken).first();
+      const sess = await c.env.DB.prepare(
+        `SELECT cs.session_label, c.name as customer_name
+         FROM customer_sessions cs
+         LEFT JOIN customers c ON cs.customer_id = c.id
+         WHERE cs.session_token = ?`
+      ).bind(sessionToken).first();
       if (sess?.session_label) sLabel = sess.session_label;
+      if (!customerName && sess?.customer_name) cName = sess.customer_name;
     }
 
     const reqId = generateUUID();
@@ -648,7 +684,7 @@ order.get('/table/:tableId/sync', async (c) => {
       orderId: orderRow?.id || null,
       status: orderRow?.status || 'NONE',
       total: orderRow?.total || 0,
-      timestamp: orderRow?.updated_at || new Date().toISOString(),
+      timestamp: toUtcIso(orderRow?.updated_at) || new Date().toISOString(),
     });
   } catch (err) {
     return c.json({ error: 'Sync error' }, 500);
