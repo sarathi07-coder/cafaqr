@@ -87,23 +87,17 @@ const CATEGORY_ICONS = {
   'fried rice': '🍚',
   'noodles': '🥢',
   'others': '🥘',
-  'omblate': '🥚',
-  'starters': '🥟',
-  'main course': '🍛',
-  'breads': '🫓',
-  'beverages': '🥤',
-  'desserts': '🍰'
+  'omblate': '🥚'
 };
 
 const CAFE_CATEGORIES = new Set([
   'mojito', 'ice cream', 'coffee & milk', 'coffee and milk',
   'juice', 'fried chicken', 'french fries', 'sandwich', 'snacks',
-  'bun', 'maggi', 'bread omblate', 'beverages', 'desserts', 'starters'
+  'bun', 'maggi', 'bread omblate'
 ]);
 
 const RESTAURANT_CATEGORIES = new Set([
-  'briyani', 'fried rice', 'noodles', 'others', 'omblate',
-  'main course', 'breads'
+  'briyani', 'fried rice', 'noodles', 'others', 'omblate'
 ]);
 
 export default function CustomerMenuPage() {

@@ -30,12 +30,12 @@ const KRISH_ITEMS = [
   { name: 'Watermelon Juice', category: 'Juice', price: 80, isVeg: true, offerBadge: 'BUY 1 GET 1 FREE', description: 'Hydrating 100% natural cold-pressed watermelon juice [BOGO OFFER]', photoUrl: '/menu-images/A_06_08_watermelon_juice.png' },
 
   // --- CAFE MENU: FRIED CHICKEN ---
-  { name: 'Fried Chicken Strips (4pcs)', category: 'Fried Chicken', price: 120, isVeg: false, description: 'Golden crunchy boneless chicken tenders served with garlic dip', photoUrl: 'https://images.unsplash.com/photo-1562967914-608f82629710?w=500' },
-  { name: 'Fried Chicken Strips (6pcs)', category: 'Fried Chicken', price: 150, isVeg: false, description: '6 crispy fried chicken strips with peri peri dipping sauce', photoUrl: 'https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=500' },
-  { name: 'Chicken Lollipop (3pcs)', category: 'Fried Chicken', price: 120, isVeg: false, description: 'Spicy Indo-Chinese chicken drummettes tossed in schezwan glaze', photoUrl: 'https://images.unsplash.com/photo-1608039829572-78524f79c4c7?w=500' },
-  { name: 'Chicken Lollipop (6pcs)', category: 'Fried Chicken', price: 150, isVeg: false, description: '6 jumbo crispy chicken lollipops with hot garlic dip', photoUrl: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=500' },
-  { name: 'Chicken Wings (4pcs)', category: 'Fried Chicken', price: 120, isVeg: false, description: 'Deep fried crispy chicken wings with tangy BBQ seasoning', photoUrl: 'https://images.unsplash.com/photo-1527477321005-4d01d75b2332?w=500' },
-  { name: 'Chicken Wings (6pcs)', category: 'Fried Chicken', price: 150, isVeg: false, description: '6 juicy crispy fried chicken wings with spicy herb dust', photoUrl: 'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=500' },
+  { name: 'Fried Chicken Strips (4pcs)', category: 'Fried Chicken', price: 120, isVeg: false, description: 'Golden crunchy boneless chicken tenders served with garlic dip', photoUrl: '/menu-images/krish_fried_chicken_strips_4pcs.jpg' },
+  { name: 'Fried Chicken Strips (6pcs)', category: 'Fried Chicken', price: 150, isVeg: false, description: '6 crispy fried chicken strips with peri peri dipping sauce', photoUrl: '/menu-images/krish_fried_chicken_strips_6pcs.jpg' },
+  { name: 'Chicken Lollipop (3pcs)', category: 'Fried Chicken', price: 120, isVeg: false, description: 'Spicy Indo-Chinese chicken drummettes tossed in schezwan glaze', photoUrl: '/menu-images/krish_chicken_lollipop_3pcs.jpg' },
+  { name: 'Chicken Lollipop (6pcs)', category: 'Fried Chicken', price: 150, isVeg: false, description: '6 jumbo crispy chicken lollipops with hot garlic dip', photoUrl: '/menu-images/krish_chicken_lollipop_6pcs.jpg' },
+  { name: 'Chicken Wings (4pcs)', category: 'Fried Chicken', price: 120, isVeg: false, description: 'Deep fried crispy chicken wings with tangy BBQ seasoning', photoUrl: '/menu-images/krish_chicken_wings_4pcs.jpg' },
+  { name: 'Chicken Wings (6pcs)', category: 'Fried Chicken', price: 150, isVeg: false, description: '6 juicy crispy fried chicken wings with spicy herb dust', photoUrl: '/menu-images/krish_chicken_wings_6pcs.jpg' },
 
   // --- CAFE MENU: FRENCH FRIES ---
   { name: 'French Fries', category: 'French Fries', price: 50, isVeg: true, description: 'Classic crispy golden salted potato fries', photoUrl: '/menu-images/A_07_01_french_fries.png' },
@@ -52,17 +52,17 @@ const KRISH_ITEMS = [
 
   // --- CAFE MENU: SNACKS ---
   { name: 'Chicken Popcorn', category: 'Snacks', price: 80, isVeg: false, description: 'Bite-sized seasoned chicken crunchies with spicy dip', photoUrl: '/menu-images/B_04_03_chicken_popcorn.png' },
-  { name: 'Chicken Nuggets', category: 'Snacks', price: 80, isVeg: false, description: 'Tender seasoned minced chicken nuggets fried to golden perfection', photoUrl: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=500' },
+  { name: 'Chicken Nuggets', category: 'Snacks', price: 80, isVeg: false, description: 'Tender seasoned minced chicken nuggets fried to golden perfection', photoUrl: '/menu-images/krish_chicken_nuggets.jpg' },
 
   // --- CAFE MENU: BUN ---
   { name: 'Jam Bun', category: 'Bun', price: 39, isVeg: true, description: 'Soft sweet bakery bun slathered with mixed fruit jam', photoUrl: '/menu-images/B_04_04_jam_bun.png' },
-  { name: 'Butter Bun', category: 'Bun', price: 49, isVeg: true, description: 'Fluffy warm bun generously spread with fresh butter', photoUrl: 'https://images.unsplash.com/photo-1586444248902-2f64eddc13df?w=500' },
-  { name: 'Bun Butter Jam', category: 'Bun', price: 59, isVeg: true, description: 'The legendary combo of soft bun with rich butter & sweet jam', photoUrl: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500' },
+  { name: 'Butter Bun', category: 'Bun', price: 49, isVeg: true, description: 'Fluffy warm bun generously spread with fresh butter', photoUrl: '/menu-images/krish_butter_bun.jpg' },
+  { name: 'Bun Butter Jam', category: 'Bun', price: 59, isVeg: true, description: 'The legendary combo of soft bun with rich butter & sweet jam', photoUrl: '/menu-images/krish_bun_butter_jam.jpg' },
 
   // --- CAFE MENU: MAGGI ---
-  { name: 'Masala Maggi', category: 'Maggi', price: 49, isVeg: true, description: 'Classic 2-minute noodles tossed with spicy butter masala & veggies', photoUrl: 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=500' },
-  { name: 'Egg Maggi', category: 'Maggi', price: 59, isVeg: false, description: 'Hot soupy masala noodles scrambled with farm-fresh egg', photoUrl: 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=500' },
-  { name: 'Chicken Maggi', category: 'Maggi', price: 69, isVeg: false, description: 'Loaded with juicy shredded chicken pieces and roasted masala', photoUrl: 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=500' },
+  { name: 'Masala Maggi', category: 'Maggi', price: 49, isVeg: true, description: 'Classic 2-minute noodles tossed with spicy butter masala & veggies', photoUrl: '/menu-images/krish_masala_maggi.jpg' },
+  { name: 'Egg Maggi', category: 'Maggi', price: 59, isVeg: false, description: 'Hot soupy masala noodles scrambled with farm-fresh egg', photoUrl: '/menu-images/krish_egg_maggi.jpg' },
+  { name: 'Chicken Maggi', category: 'Maggi', price: 69, isVeg: false, description: 'Loaded with juicy shredded chicken pieces and roasted masala', photoUrl: '/menu-images/krish_chicken_maggi.jpg' },
 
   // --- CAFE MENU: BREAD OMBLATE ---
   { name: 'Bread Omblate', category: 'Bread Omblate', price: 50, isVeg: false, description: 'Street-style spiced egg omelette wrapped around toasted bread slices', photoUrl: '/menu-images/B_04_05_bread_omblate.png' },
@@ -77,7 +77,7 @@ const KRISH_ITEMS = [
 
   // --- RESTAURANT MENU: FRIED RICE ---
   { name: 'Chicken Fried Rice', category: 'Fried Rice', price: 110, isVeg: false, description: 'Wok-tossed basmati rice with diced chicken, eggs and scallions', photoUrl: '/menu-images/B_01_05_chicken_fried_rice.png' },
-  { name: 'Chicken Schezwan Rice', category: 'Fried Rice', price: 130, isVeg: false, description: 'Fiery wok fried rice with chicken in home-made schezwan chili sauce', photoUrl: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=500' },
+  { name: 'Chicken Schezwan Rice', category: 'Fried Rice', price: 130, isVeg: false, description: 'Fiery wok fried rice with chicken in home-made schezwan chili sauce', photoUrl: '/menu-images/krish_chicken_schezwan_rice.jpg' },
   { name: 'Egg Fried Rice', category: 'Fried Rice', price: 90, isVeg: false, description: 'Aromatic wok tossed rice with scrambled egg, white pepper & greens', photoUrl: '/menu-images/A_01_06_egg_fried_rice.png' },
   { name: 'Veg Fried Rice', category: 'Fried Rice', price: 80, isVeg: true, description: 'Crunchy carrots, beans, and cabbage tossed with aromatic rice', photoUrl: '/menu-images/A_01_07_veg_fried_rice.png' },
   { name: 'Paneer Fried Rice', category: 'Fried Rice', price: 110, isVeg: true, description: 'Golden paneer cubes wok-tossed with fragrant spiced fried rice', photoUrl: '/menu-images/A_02_01_paneer_fried_rice.png' },

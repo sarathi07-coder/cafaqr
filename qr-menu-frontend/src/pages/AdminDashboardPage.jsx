@@ -138,7 +138,7 @@ export default function AdminDashboardPage() {
   const [dishFormData, setDishFormData] = useState({
     name: '',
     description: '',
-    category: 'Main Course',
+    category: 'Briyani',
     price: '',
     originalPrice: '',
     offerBadge: '',
@@ -211,7 +211,7 @@ export default function AdminDashboardPage() {
     setDishFormData({
       name: '',
       description: '',
-      category: 'Main Course',
+      category: 'Briyani',
       price: '',
       originalPrice: '',
       offerBadge: '',
@@ -236,7 +236,7 @@ export default function AdminDashboardPage() {
     setDishFormData({
       name: dish.name || '',
       description: dish.description || '',
-      category: dish.category || 'Main Course',
+      category: dish.category || 'Briyani',
       price: dish.price ? String(dish.price) : '',
       originalPrice: dish.original_price ? String(dish.original_price) : '',
       offerBadge: dish.offer_badge || '',
@@ -1148,10 +1148,10 @@ export default function AdminDashboardPage() {
                       </div>
                       <div>
                         <h4 className="font-serif font-bold text-sm text-stone-900">
-                          {dishPerf?.highestSoldDish?.name || 'Fresh Lime Soda'}
+                          {dishPerf?.highestSoldDish?.name || 'Chicken Briyani'}
                         </h4>
                         <p className="text-xs text-stone-600">
-                          Category: {dishPerf?.highestSoldDish?.category || 'Beverages'} &bull; ₹{parseFloat(dishPerf?.highestSoldDish?.price || 0).toFixed(2)}
+                          Category: {dishPerf?.highestSoldDish?.category || 'Briyani'} &bull; ₹{parseFloat(dishPerf?.highestSoldDish?.price || 0).toFixed(2)}
                         </p>
                       </div>
                       <div className="pt-2 border-t border-amber-200/60 flex items-baseline justify-between text-xs">
@@ -1174,10 +1174,10 @@ export default function AdminDashboardPage() {
                       </div>
                       <div>
                         <h4 className="font-serif font-bold text-sm text-stone-900">
-                          {dishPerf?.lowestSoldDish?.name || 'Dal Makhani'}
+                          {dishPerf?.lowestSoldDish?.name || 'Mint Mojito'}
                         </h4>
                         <p className="text-xs text-stone-600">
-                          Category: {dishPerf?.lowestSoldDish?.category || 'Main Course'} &bull; ₹{parseFloat(dishPerf?.lowestSoldDish?.price || 0).toFixed(2)}
+                          Category: {dishPerf?.lowestSoldDish?.category || 'Mojito'} &bull; ₹{parseFloat(dishPerf?.lowestSoldDish?.price || 0).toFixed(2)}
                         </p>
                       </div>
                       <div className="pt-2 border-t border-stone-200 flex items-center justify-between text-xs">
@@ -1703,7 +1703,7 @@ export default function AdminDashboardPage() {
                 .map((item) => {
                   const isAvail = item.is_available !== false && item.available !== false;
                   const hasOffer = item.original_price && parseFloat(item.original_price) > parseFloat(item.price);
-                  const displayImg = item.photo_url || item.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80';
+                  const displayImg = item.photo_url || item.image_url || '/menu-images/B_01_01_chicken_biryani.png';
 
                   return (
                     <div
@@ -1721,7 +1721,7 @@ export default function AdminDashboardPage() {
                             className={`w-full h-full object-cover ${!isAvail ? 'grayscale-60' : ''}`}
                             onError={(e) => {
                               e.target.onerror = null;
-                              e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80';
+                              e.target.src = '/menu-images/B_01_01_chicken_biryani.png';
                             }}
                           />
 
@@ -2942,11 +2942,22 @@ export default function AdminDashboardPage() {
                     onChange={(e) => setDishFormData({ ...dishFormData, category: e.target.value })}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-stone-200 focus:outline-none focus:border-amber-500 bg-white"
                   >
-                    <option value="Starters">Starters</option>
-                    <option value="Main Course">Main Course</option>
-                    <option value="Breads">Breads</option>
-                    <option value="Desserts">Desserts</option>
-                    <option value="Beverages">Beverages</option>
+                    <option value="Mojito">Mojito</option>
+                    <option value="Ice Cream">Ice Cream</option>
+                    <option value="Coffee & Milk">Coffee &amp; Milk</option>
+                    <option value="Juice">Juice</option>
+                    <option value="Fried Chicken">Fried Chicken</option>
+                    <option value="French Fries">French Fries</option>
+                    <option value="Sandwich">Sandwich</option>
+                    <option value="Snacks">Snacks</option>
+                    <option value="Bun">Bun</option>
+                    <option value="Maggi">Maggi</option>
+                    <option value="Bread Omblate">Bread Omblate</option>
+                    <option value="Briyani">Briyani</option>
+                    <option value="Fried Rice">Fried Rice</option>
+                    <option value="Noodles">Noodles</option>
+                    <option value="Others">Others</option>
+                    <option value="Omblate">Omblate</option>
                   </select>
                 </div>
               </div>

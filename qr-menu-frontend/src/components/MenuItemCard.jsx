@@ -9,28 +9,26 @@ export default function MenuItemCard({ item }) {
   const isAvailable = item.is_available !== false && item.available !== false;
 
   const fallbackImages = {
-    'mojito': 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500',
-    'ice cream': 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=500',
-    'coffee & milk': 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=500',
-    'juice': 'https://images.unsplash.com/photo-1589733955941-5eeaf752f6dd?w=500',
-    'fried chicken': 'https://images.unsplash.com/photo-1562967914-608f82629710?w=500',
-    'french fries': 'https://images.unsplash.com/photo-1576107232684-1279f3908594?w=500',
-    'sandwich': 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=500',
-    'snacks': 'https://images.unsplash.com/photo-1562967914-608f82629710?w=500',
-    'bun': 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=500',
-    'maggi': 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=500',
-    'bread omblate': 'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=500',
-    'briyani': 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500',
-    'fried rice': 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=500',
-    'noodles': 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=500',
-    'others': 'https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?w=500',
-    'omblate': 'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=500',
-    'starters': 'https://images.unsplash.com/photo-1541529086526-db283c563270?w=500',
-    'main course': 'https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=500',
+    'mojito': '/menu-images/B_04_01_mint_mojito.png',
+    'ice cream': '/menu-images/B_04_02_brownie_with_ice_cream.png',
+    'coffee & milk': '/menu-images/A_06_03_cold_coffee.png',
+    'juice': '/menu-images/A_06_08_watermelon_juice.png',
+    'fried chicken': '/menu-images/krish_fried_chicken_strips_6pcs.jpg',
+    'french fries': '/menu-images/A_07_01_french_fries.png',
+    'sandwich': '/menu-images/A_07_06_chicken_sandwich.png',
+    'snacks': '/menu-images/B_04_03_chicken_popcorn.png',
+    'bun': '/menu-images/krish_bun_butter_jam.jpg',
+    'maggi': '/menu-images/krish_masala_maggi.jpg',
+    'bread omblate': '/menu-images/B_04_05_bread_omblate.png',
+    'briyani': '/menu-images/B_01_01_chicken_biryani.png',
+    'fried rice': '/menu-images/B_01_05_chicken_fried_rice.png',
+    'noodles': '/menu-images/B_02_01_chicken_noodles.png',
+    'others': '/menu-images/B_03_04_curd_rice_chicken_65.png',
+    'omblate': '/menu-images/B_03_01_omblate.png',
   };
 
   const categoryKey = (item.category || '').toLowerCase();
-  const displayImage = item.photo_url || item.image_url || fallbackImages[categoryKey] || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500';
+  const displayImage = item.photo_url || item.image_url || fallbackImages[categoryKey] || '/menu-images/B_01_01_chicken_biryani.png';
 
   const isVeg = item.is_veg !== undefined
     ? Boolean(item.is_veg)
@@ -73,7 +71,7 @@ export default function MenuItemCard({ item }) {
             loading="lazy"
             onError={(e) => {
               e.target.onerror = null;
-              e.target.src = fallbackImages[categoryKey] || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500';
+              e.target.src = fallbackImages[categoryKey] || '/menu-images/B_01_01_chicken_biryani.png';
             }}
           />
 
