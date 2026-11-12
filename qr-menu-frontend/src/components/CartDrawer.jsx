@@ -12,6 +12,70 @@ const triggerConfetti = async (opts) => {
   }
 };
 
+let sharedOrderAudioCtx = null;
+
+function getOrderAudioContext() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return null;
+  if (!sharedOrderAudioCtx) {
+    sharedOrderAudioCtx = new AudioCtx();
+  }
+  return sharedOrderAudioCtx;
+}
+
+// Unlock AudioContext synchronously during the button tap so async order confirmation chimes work on mobile browsers
+function unlockOrderAudioContext() {
+  try {
+    const ctx = getOrderAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  } catch {
+    // Ignore audio errors
+  }
+}
+
+// Play pleasant confirmation chime once an order is confirmed sent to the kitchen
+function playOrderConfirmationSound(isAddOn = false) {
+  try {
+    const ctx = getOrderAudioContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    const now = ctx.currentTime;
+    const notes = isAddOn
+      ? [
+          { freq: 659.25, start: 0, duration: 0.18, gain: 0.2 }, // E5
+          { freq: 880.0, start: 0.11, duration: 0.22, gain: 0.22 }, // A5
+          { freq: 1046.5, start: 0.23, duration: 0.42, gain: 0.24 }, // C6
+        ]
+      : [
+          { freq: 523.25, start: 0, duration: 0.16, gain: 0.18 }, // C5
+          { freq: 659.25, start: 0.09, duration: 0.18, gain: 0.2 }, // E5
+          { freq: 783.99, start: 0.18, duration: 0.2, gain: 0.22 }, // G5
+          { freq: 1046.5, start: 0.28, duration: 0.5, gain: 0.24 }, // C6
+        ];
+
+    notes.forEach(({ freq, start, duration, gain: peak }) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + start);
+      g.gain.setValueAtTime(0.001, now + start);
+      g.gain.exponentialRampToValueAtTime(peak, now + start + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(now + start);
+      osc.stop(now + start + duration + 0.02);
+    });
+  } catch (err) {
+    console.warn('Order confirmation audio playback skipped:', err);
+  }
+}
+
 export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiModal }) {
   const {
     tableId,
@@ -198,6 +262,9 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
       return;
     }
 
+    // Unlock audio within the user click gesture before async order request
+    unlockOrderAudioContext();
+
     setIsSubmitting(true);
     try {
       if (hasActiveSession && activeOrder?.id) {
@@ -209,7 +276,8 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
         }));
 
         await api.addItemsToOrder(activeOrder.id, itemsPayload);
-        
+
+        playOrderConfirmationSound(true);
         triggerConfetti({
           particleCount: 80,
           spread: 60,
@@ -218,7 +286,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
 
         clearCart();
         await checkSession(tableId);
-        if (onOrderSuccess) onOrderSuccess('Added to your table bill!');
+        if (onOrderSuccess) onOrderSuccess('Added to your table bill & sent to kitchen!');
         onClose();
       } else {
         // Create initial table order
@@ -239,7 +307,8 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
         };
 
         const res = await api.createOrder(orderPayload);
-        
+
+        playOrderConfirmationSound(false);
         triggerConfetti({
           particleCount: 120,
           spread: 80,
@@ -248,7 +317,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
 
         clearCart();
         await checkSession(tableId);
-        if (onOrderSuccess) onOrderSuccess(`Order placed! Ticket #${res.order?.id?.slice(0, 8)}`);
+        if (onOrderSuccess) onOrderSuccess(`Order placed & sent to kitchen! Ticket #${res.order?.id?.slice(0, 8)}`);
         onClose();
       }
     } catch (err) {
@@ -332,8 +401,12 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                     )}
                     <span className="font-bold text-xs">
                       {isOrderEditable
-                        ? '🟢 Editable (Cooking hasn\'t started): You can cancel or remove dishes before chef begins preparation.'
-                        : '🔒 Locked (Cooking in progress): Preparation has begun. Dishes cannot be removed.'}
+                        ? ((activeOrder.items || []).some((it) => it.status && it.status !== 'PENDING')
+                          ? '🆕 Extra items sent to kitchen — Previously served dishes stay served; you can cancel new items before cooking starts.'
+                          : '🟢 Editable (Cooking hasn\'t started): You can cancel or remove dishes before chef begins preparation.')
+                        : (activeOrder.status === 'SERVED'
+                          ? '🍽️ All dishes served! You can add extra dishes anytime or settle your bill.'
+                          : '🔒 Locked (Cooking in progress): Preparation has begun. Dishes cannot be removed.')}
                     </span>
                   </div>
                 </div>

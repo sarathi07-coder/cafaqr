@@ -497,6 +497,65 @@ order.post('/:id/items', async (c) => {
   }
 });
 
+// DELETE /api/order/:id/items/:itemId (Cancel a PENDING item before chef starts cooking)
+order.delete('/:id/items/:itemId', async (c) => {
+  const orderId = c.req.param('id');
+  const itemId = c.req.param('itemId');
+  try {
+    const ord = await c.env.DB.prepare('SELECT id, restaurant_id, status FROM orders WHERE id = ?').bind(orderId).first();
+    if (!ord) return c.json({ error: 'Order not found' }, 404);
+    if (['PAID', 'CANCELLED'].includes(ord.status)) {
+      return c.json({ error: 'Cannot remove items from a settled or cancelled order' }, 400);
+    }
+
+    const targetItem = await c.env.DB.prepare('SELECT id, status FROM order_items WHERE id = ? AND order_id = ?')
+      .bind(itemId, orderId)
+      .first();
+    if (!targetItem) return c.json({ error: 'Dish not found on this order' }, 404);
+    if (targetItem.status !== 'PENDING') {
+      return c.json({ error: `Cannot remove dish because it is already ${targetItem.status.toLowerCase()}.` }, 400);
+    }
+
+    await c.env.DB.prepare('DELETE FROM order_items WHERE id = ? AND order_id = ?').bind(itemId, orderId).run();
+
+    const remainingRes = await c.env.DB.prepare(
+      'SELECT status FROM order_items WHERE order_id = ?'
+    ).bind(orderId).all();
+    const remainingStatuses = (remainingRes.results || []).map((r) => r.status);
+
+    let nextOrderStatus = ord.status;
+    if (remainingStatuses.length === 0) {
+      nextOrderStatus = 'CANCELLED';
+    } else if (remainingStatuses.includes('PENDING')) {
+      nextOrderStatus = 'PENDING';
+    } else if (remainingStatuses.includes('PREPARING')) {
+      nextOrderStatus = 'PREPARING';
+    } else if (remainingStatuses.includes('READY')) {
+      nextOrderStatus = 'READY';
+    } else {
+      nextOrderStatus = 'SERVED';
+    }
+
+    await c.env.DB.prepare("UPDATE orders SET status = ?, updated_at = datetime('now') WHERE id = ?")
+      .bind(nextOrderStatus, orderId)
+      .run();
+
+    const totals = await recalculateOrderTotals(c.env.DB, orderId, ord.restaurant_id);
+
+    return c.json({
+      success: true,
+      orderId,
+      removedItemId: itemId,
+      status: nextOrderStatus,
+      total: totals.total,
+      totals,
+    });
+  } catch (err) {
+    console.error('Remove order item error:', err);
+    return c.json({ error: 'Failed to remove dish' }, 500);
+  }
+});
+
 // PUT /api/order/:id/notes (Update Cooking Notes)
 order.put('/:id/notes', async (c) => {
   const orderId = c.req.param('id');

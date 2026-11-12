@@ -162,7 +162,7 @@ const fetchActiveTicketsHandler = async (c) => {
 
     for (const ord of orders) {
       const itemsRes = await c.env.DB.prepare(
-        `SELECT oi.id, oi.menu_item_id, oi.quantity, oi.price_at_order, oi.status, oi.special_instructions,
+        `SELECT oi.id, oi.menu_item_id, oi.quantity, oi.price_at_order, oi.status, oi.special_instructions, oi.created_at,
                 mi.name, mi.is_veg, mi.category
          FROM order_items oi
          JOIN menu_items mi ON oi.menu_item_id = mi.id
@@ -172,16 +172,29 @@ const fetchActiveTicketsHandler = async (c) => {
         .bind(ord.id)
         .all();
 
-      const items = itemsRes.results || [];
+      const allItems = itemsRes.results || [];
 
-      // Only show tickets that have cooking items
-      if (items.length === 0) continue;
+      // Partition already-served items from items still needing kitchen preparation/pickup
+      const servedItems = allItems.filter((it) => it.status === 'SERVED');
+      const kitchenItems = allItems
+        .filter((it) => it.status !== 'SERVED')
+        .map((it) => ({
+          ...it,
+          created_at: toUtcIso(it.created_at) || null,
+        }));
+
+      // Only show tickets that still have unserved cooking/pickup items
+      if (kitchenItems.length === 0) continue;
+
+      const servedItemsCount = servedItems.reduce((sum, it) => sum + Number(it.quantity || 1), 0);
 
       // Normalize SQLite UTC timestamps to ISO-8601 Z so browsers in any timezone calculate elapsed time accurately
       const createdIso = toUtcIso(ord.created_at) || new Date().toISOString();
       const updatedIso = toUtcIso(ord.updated_at) || createdIso;
-      const createdAt = new Date(createdIso);
-      const elapsedMinutes = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / 60000));
+      // For add-on rounds after earlier items were served, time from the newly added round rather than initial seating
+      const kitchenSinceIso = kitchenItems[0]?.created_at || (servedItemsCount > 0 ? updatedIso : createdIso);
+      const kitchenSinceDate = new Date(kitchenSinceIso);
+      const elapsedMinutes = Math.max(0, Math.floor((Date.now() - kitchenSinceDate.getTime()) / 60000));
 
       tickets.push({
         ...ord,
@@ -193,8 +206,11 @@ const fetchActiveTicketsHandler = async (c) => {
         customer_phone: ord.customer_phone || null,
         created_at: createdIso,
         updated_at: updatedIso,
+        kitchen_since: kitchenSinceIso,
         elapsed_minutes: elapsedMinutes,
-        items,
+        served_items_count: servedItemsCount,
+        is_add_on: servedItemsCount > 0,
+        items: kitchenItems,
       });
     }
 
@@ -237,12 +253,26 @@ const advanceTicketHandler = async (c) => {
       .bind(targetStatus, orderId)
       .run();
 
-    // Advance all active items to match
-    await c.env.DB.prepare(
-      `UPDATE order_items SET status = ? WHERE order_id = ? AND status != 'CANCELLED'`
-    )
-      .bind(targetStatus, orderId)
-      .run();
+    // Advance unserved/earlier items monotonically without regressing already-SERVED or further-along dishes
+    if (targetStatus === 'PREPARING') {
+      await c.env.DB.prepare(
+        `UPDATE order_items SET status = 'PREPARING' WHERE order_id = ? AND status = 'PENDING'`
+      )
+        .bind(orderId)
+        .run();
+    } else if (targetStatus === 'READY') {
+      await c.env.DB.prepare(
+        `UPDATE order_items SET status = 'READY' WHERE order_id = ? AND status IN ('PENDING', 'PREPARING')`
+      )
+        .bind(orderId)
+        .run();
+    } else if (targetStatus === 'SERVED') {
+      await c.env.DB.prepare(
+        `UPDATE order_items SET status = 'SERVED' WHERE order_id = ? AND status IN ('PENDING', 'PREPARING', 'READY')`
+      )
+        .bind(orderId)
+        .run();
+    }
 
     return c.json({
       success: true,

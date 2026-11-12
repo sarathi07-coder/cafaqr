@@ -225,16 +225,27 @@ export default function KitchenPage() {
         order_id: t.order_id || t.id,
       }));
 
-      // Trigger distinct kitchen chimes when polling detects new/ready/served transitions
+      // Trigger distinct kitchen chimes when polling detects new/add-on/ready/served transitions
       const nextStatusMap = new Map();
-      safeTickets.forEach((t) => nextStatusMap.set(t.id, { status: t.status, tableNumber: t.table_number || t.tableNumber || '1' }));
+      safeTickets.forEach((t) => {
+        const itemCount = (t.items || []).reduce((sum, it) => sum + Number(it.quantity || 1), 0);
+        nextStatusMap.set(t.id, {
+          status: t.status,
+          itemCount,
+          tableNumber: t.table_number || t.tableNumber || '1',
+        });
+      });
 
       if (!isInitialLoadRef.current) {
         const prevMap = prevTicketStatusMapRef.current;
 
         const newlyPending = safeTickets.find((t) => {
           const prev = prevMap.get(t.id);
-          return t.status === 'PENDING' && (!prev || prev.status !== 'PENDING');
+          const itemCount = (t.items || []).reduce((sum, it) => sum + Number(it.quantity || 1), 0);
+          return (
+            t.status === 'PENDING' &&
+            (!prev || prev.status !== 'PENDING' || itemCount > (prev.itemCount || 0))
+          );
         });
 
         const newlyReady = safeTickets.find((t) => {
@@ -1002,11 +1013,15 @@ export default function KitchenPage() {
 
 // Individual KDS Ticket Component
 function KDSTicketCard({ ticket, onAdvance, nextLabel, nextColor, isCompleted }) {
-  // Elapsed timer computation (handles SQLite UTC timestamps reliably in local timezones)
-  const createdAt = parseUtcTimestamp(ticket.created_at);
+  // Elapsed timer computation (uses newly added kitchen round timestamp when add-on dishes arrive)
+  const createdAt = parseUtcTimestamp(ticket.kitchen_since || ticket.created_at);
   const elapsedMinutes = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / 60000));
   const customerName = (ticket.customer_name || ticket.customerName || '').trim();
   const sessionLabel = ticket.session_label || ticket.sessionLabel || 'Customer';
+  const servedCount = Number(ticket.served_items_count || 0);
+  const isAddOn = Boolean(ticket.is_add_on || servedCount > 0);
+  const ticketItems = Array.isArray(ticket.items) ? ticket.items : [];
+  const hasMixedStatuses = ticketItems.some((i) => i.status && i.status !== ticketItems[0]?.status);
 
   const getUrgencyBadge = () => {
     if (elapsedMinutes >= 20) {
@@ -1036,13 +1051,18 @@ function KDSTicketCard({ ticket, onAdvance, nextLabel, nextColor, isCompleted })
         {/* Ticket Top Meta */}
         <div className="flex items-center justify-between pb-3 border-b border-white/10">
           <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-base font-black text-amber-300 bg-amber-400/15 px-2.5 py-1 rounded-xl border border-amber-400/30">
                 Table #{ticket.table_number || ticket.tableNumber || '1'}
               </span>
               <span className="text-xs text-stone-500 font-mono">
                 #{String(ticket.id || '').slice(0, 6)}
               </span>
+              {isAddOn && (
+                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  + Extra Add-On ({servedCount} served)
+                </span>
+              )}
             </div>
             {/* Customer Session Identifier */}
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -1065,20 +1085,33 @@ function KDSTicketCard({ ticket, onAdvance, nextLabel, nextColor, isCompleted })
           </div>
         )}
 
-        {/* Items to Cook */}
+        {/* Items to Cook (only unserved dishes) */}
         <div className="py-2.5 space-y-2">
-          {(ticket.items || []).map((item, idx) => (
+          {ticketItems.map((item, idx) => (
             <div
-              key={idx}
+              key={item.id || idx}
               className="flex items-center justify-between text-xs py-1 border-b border-white/5 last:border-0"
             >
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-lg bg-stone-800 text-amber-400 font-black flex items-center justify-center text-xs border border-white/10">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-6 h-6 rounded-lg bg-stone-800 text-amber-400 font-black flex items-center justify-center text-xs border border-white/10 shrink-0">
                   {item.quantity}x
                 </span>
-                <span className="font-bold text-stone-100 text-sm">{item.name || item.item_name}</span>
+                <span className="font-bold text-stone-100 text-sm truncate">{item.name || item.item_name}</span>
+                {hasMixedStatuses && item.status && (
+                  <span
+                    className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border shrink-0 ${
+                      item.status === 'PENDING'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : item.status === 'PREPARING'
+                        ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    }`}
+                  >
+                    {item.status === 'PENDING' ? 'New' : item.status === 'PREPARING' ? 'Cooking' : 'Ready'}
+                  </span>
+                )}
               </div>
-              <span className="text-[10px] text-stone-400 uppercase tracking-wider font-semibold">
+              <span className="text-[10px] text-stone-400 uppercase tracking-wider font-semibold shrink-0 ml-2">
                 {item.category || 'Kitchen'}
               </span>
             </div>
