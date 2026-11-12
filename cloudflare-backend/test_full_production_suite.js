@@ -437,9 +437,12 @@ async function runMasterSuite() {
       const restoreRes = await fetch(`${API_BASE}/admin/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ restaurantId, recoveryPin: '2026', newPassword: 'supersecret' }),
+        body: JSON.stringify({ restaurantId, currentPassword: tempPassword, newPassword: 'supersecret' }),
       });
       const restoreData = await restoreRes.json().catch(() => ({}));
+      if (!restoreRes.ok) {
+        throw new Error(`Failed to restore supersecret: ${JSON.stringify(restoreData)}`);
+      }
       if (restoreData.token) adminToken = restoreData.token;
     }
   });
@@ -611,12 +614,33 @@ async function runMasterSuite() {
 
   // SECTION 13: QR Code Engine & Stand Printing
   console.log('\n--- SECTION 13: Native Edge QR Code Generation ---');
-  await testStep('Bulk Table QR Codes (GET /qr/restaurant/:id/bulk)', async () => {
+  let parcelTableEntry = null;
+  await testStep('Bulk Table & Parcel QR Codes (GET /qr/restaurant/:id/bulk)', async () => {
     const res = await fetch(`${API_BASE}/qr/restaurant/${restaurantId}/bulk`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    if (!Array.isArray(data.tables) || data.tables.length < 5) throw new Error('Missing tables');
-    return `${data.tables.length} table QR SVGs generated`;
+    const list = Array.isArray(data.tables) ? data.tables : [];
+    const dineIn = list.filter((t) => Number(t.number) > 0);
+    parcelTableEntry = list.find((t) => Number(t.number) === 0);
+    if (dineIn.length < 15) throw new Error(`Expected >= 15 dine-in tables, got ${dineIn.length}`);
+    if (!parcelTableEntry || !parcelTableEntry.isParcel || !String(parcelTableEntry.orderUrl || '').includes('orderType=PARCEL')) {
+      throw new Error(`Missing Parcel / Takeaway QR entry: ${JSON.stringify(parcelTableEntry)}`);
+    }
+    if (Number(defaultTable.number) !== 1) {
+      throw new Error(`Expected /tables/default to resolve to Table #1, got #${defaultTable.number}`);
+    }
+    return `${dineIn.length} dine-in table QRs (1-15) + Parcel QR ready`;
+  });
+
+  await testStep('Parcel Counter QR SVG Download (GET /qr/:parcelId?download=1)', async () => {
+    const res = await fetch(`${API_BASE}/qr/${parcelTableEntry.tableId}?format=svg&download=1`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const disp = res.headers.get('content-disposition') || '';
+    const svg = await res.text();
+    if (!svg.includes('<svg') || !disp.includes('krish_parcel_takeaway_qr.svg')) {
+      throw new Error(`Invalid Parcel QR response: ${disp}`);
+    }
+    return `Parcel SVG (${svg.length} bytes, header: ${disp})`;
   });
 
   await testStep('Individual Table QR Download (GET /qr/:tableId?format=svg)', async () => {

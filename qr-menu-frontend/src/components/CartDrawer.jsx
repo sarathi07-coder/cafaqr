@@ -3,6 +3,7 @@ import { X, Trash2, Plus, Minus, Tag, Users, CheckCircle2, AlertCircle, Sparkles
 import { useCart } from '../context/CartContext';
 import { api } from '../api';
 import { unlockOrderAudio, playOrderConfirmationSound } from '../utils/sound';
+import { isParcelTable } from '../utils/tableDisplay';
 
 const triggerConfetti = async (opts) => {
   try {
@@ -235,9 +236,12 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
         clearCart();
         await checkSession(tableId);
         if (onOrderSuccess) {
+          const isParcel = isParcelTable(tableNumber);
           onOrderSuccess(
             addRes?.isNewTicket
-              ? `New order sent to kitchen! Ticket #${String(addRes.orderId || '').slice(0, 6)}`
+              ? `New ${isParcel ? 'parcel ' : ''}order sent to kitchen! Ticket #${String(addRes.orderId || '').slice(0, 6)}`
+              : isParcel
+              ? 'Added to your parcel order & sent to kitchen!'
               : 'Added to your table bill & sent to kitchen!'
           );
         }
@@ -296,10 +300,14 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
           <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between bg-[#15120E]/90 backdrop-blur-md">
             <div>
               <h2 className="font-bold text-lg text-white leading-tight flex items-center gap-2">
-                <span>{hasActiveSession ? 'Table Bill & Order Summary' : 'Your Table Cart'}</span>
+                <span>
+                  {isParcelTable(tableNumber)
+                    ? (hasActiveSession ? 'Parcel Bill & Order Summary' : 'Your Parcel / Takeaway Cart')
+                    : (hasActiveSession ? 'Table Bill & Order Summary' : 'Your Table Cart')}
+                </span>
               </h2>
               <p className="text-xs text-amber-300/80 font-medium mt-0.5">
-                Table #{tableNumber || '1'} &bull; KRISH Cafe &amp; Restaurant
+                {isParcelTable(tableNumber) ? '🛍️ Parcel / Takeaway' : `Table #${tableNumber || '1'}`} &bull; KRISH Cafe &amp; Restaurant
               </p>
             </div>
             <div className="flex items-center gap-1">
@@ -870,8 +878,8 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                     <Sparkles className="w-4 h-4 stroke-[2.5]" />
                     <span>
                       {hasActiveSession
-                        ? `Add ${itemsList.length} Item${itemsList.length > 1 ? 's' : ''} to Table Order`
-                        : 'Confirm & Place Order'}
+                        ? `Add ${itemsList.length} Item${itemsList.length > 1 ? 's' : ''} to ${isParcelTable(tableNumber) ? 'Parcel' : 'Table'} Order`
+                        : (isParcelTable(tableNumber) ? 'Confirm & Place Parcel Order' : 'Confirm & Place Order')}
                     </span>
                   </>
                 )}

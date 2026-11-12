@@ -126,7 +126,9 @@ export default function BillViewPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-stone-500">TABLE:</span>
-                <span className="font-bold">T{String(bill.tableNumber || 1).padStart(2, '0')}</span>
+                <span className="font-bold">
+                  {Number(bill.tableNumber) === 0 ? 'PARCEL' : `T${String(bill.tableNumber ?? 1).padStart(2, '0')}`}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-stone-500">GUEST:</span>

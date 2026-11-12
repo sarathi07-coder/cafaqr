@@ -49,7 +49,7 @@ export default function ServiceCallModal({
         <div className="flex items-center justify-between pb-3 border-b border-white/10">
           <div>
             <h3 className="font-bold text-base text-white">
-              Table #{tableNumber} {sessionLabel ? `• ${sessionLabel}` : ''}
+              {Number(tableNumber) === 0 ? 'Parcel / Takeaway' : `Table #${tableNumber}`} {sessionLabel ? `• ${sessionLabel}` : ''}
             </h3>
             <p className="text-xs text-amber-300/80">How can our team assist you right now?</p>
           </div>
@@ -67,8 +67,12 @@ export default function ServiceCallModal({
             <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full flex items-center justify-center mx-auto shadow-inner">
               <Check className="w-6 h-6 stroke-[3]" />
             </div>
-            <p className="font-bold text-white text-sm">Waiter Notified!</p>
-            <p className="text-xs text-stone-400">A team member will be right with you at Table #{tableNumber}.</p>
+            <p className="font-bold text-white text-sm">Staff Notified!</p>
+            <p className="text-xs text-stone-400">
+              {Number(tableNumber) === 0
+                ? 'A team member at the Parcel Counter will assist you shortly.'
+                : `A team member will be right with you at Table #${tableNumber}.`}
+            </p>
           </div>
         ) : (
           <div className="py-4 space-y-3">

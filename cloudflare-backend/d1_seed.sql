@@ -17,13 +17,24 @@ INSERT OR REPLACE INTO restaurants (
     '[{"id":"acc_1","bank":"State Bank of India (SBI)","upi_id":"vallipriya1212-1@oksbi","upi_name":"Royal Spice Bistro (SBI)","daily_limit":"₹1,00,000 / day","notes":"Primary Account (GPay / PhonePe / Paytm)"},{"id":"acc_2","bank":"HDFC Bank","upi_id":"royalspice.bistro@okhdfcbank","upi_name":"Royal Spice Bistro (HDFC)","daily_limit":"₹2,00,000 / day","notes":"Secondary Backup"},{"id":"acc_3","bank":"ICICI Bank","upi_id":"royalspice@icici","upi_name":"Royal Spice Bistro (ICICI)","daily_limit":"₹2,00,000 / day","notes":"Weekend High-Volume Backup"}]'
 );
 
--- 2. Dining Tables 1 to 5
+-- 2. Parcel / Takeaway + Dining Tables 1 to 15
 INSERT OR REPLACE INTO tables (id, number, restaurant_id, qr_code_url) VALUES 
+('a1000000-0000-0000-0000-000000000000', 0, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=0&orderType=PARCEL'),
 ('b6f869e1-d722-440a-8928-a65e1e76ced5', 1, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=1'),
 ('a1000000-0000-0000-0000-000000000002', 2, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=2'),
 ('a1000000-0000-0000-0000-000000000003', 3, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=3'),
 ('a1000000-0000-0000-0000-000000000004', 4, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=4'),
-('a1000000-0000-0000-0000-000000000005', 5, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=5');
+('a1000000-0000-0000-0000-000000000005', 5, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=5'),
+('a1000000-0000-0000-0000-000000000006', 6, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=6'),
+('a1000000-0000-0000-0000-000000000007', 7, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=7'),
+('a1000000-0000-0000-0000-000000000008', 8, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=8'),
+('a1000000-0000-0000-0000-000000000009', 9, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=9'),
+('a1000000-0000-0000-0000-000000000010', 10, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=10'),
+('a1000000-0000-0000-0000-000000000011', 11, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=11'),
+('a1000000-0000-0000-0000-000000000012', 12, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=12'),
+('a1000000-0000-0000-0000-000000000013', 13, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=13'),
+('a1000000-0000-0000-0000-000000000014', 14, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=14'),
+('a1000000-0000-0000-0000-000000000015', 15, 'db4ed920-3d20-420a-9f54-99d3c0b48a08', '/order?tableNumber=15');
 
 -- 3. Menu Items
 INSERT OR REPLACE INTO menu_items (id, restaurant_id, name, description, price, original_price, offer_badge, photo_url, category, is_veg, available) VALUES

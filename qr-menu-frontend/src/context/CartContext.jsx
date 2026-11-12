@@ -100,7 +100,7 @@ export function CartProvider({ children }) {
       if (sessionData.table?.restaurant_id) {
         setRestaurantId(sessionData.table.restaurant_id);
       }
-      if (sessionData.table?.number) {
+      if (sessionData.table?.number !== undefined && sessionData.table?.number !== null) {
         setTableNumber(sessionData.table.number);
       }
 

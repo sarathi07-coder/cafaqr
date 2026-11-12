@@ -83,7 +83,9 @@ export default function UpiPaymentModal({
 
   // Clean bill amount (two decimals)
   const payableAmount = parseFloat(amount || 0).toFixed(2);
-  const transactionNote = `Table ${tableNumber} Bill`;
+  const isParcelMode = Number(tableNumber) === 0 || String(tableNumber).toUpperCase() === 'PARCEL';
+  const tableDisplayLabel = isParcelMode ? 'Parcel / Takeaway' : `Table #${tableNumber}`;
+  const transactionNote = isParcelMode ? 'Parcel Takeaway Bill' : `Table ${tableNumber} Bill`;
 
   // Standard NPCI UPI URI Specification
   // Format: upi://pay?pa=<VPA>&pn=<NAME>&am=<AMOUNT>&cu=INR&tn=<NOTE>
@@ -202,7 +204,7 @@ export default function UpiPaymentModal({
                 Scan & Pay via UPI
               </h3>
               <p className="text-[11px] text-stone-400 mt-1 flex items-center gap-1.5">
-                <span>Table #{tableNumber}</span>
+                <span>{tableDisplayLabel}</span>
                 <span>&bull;</span>
                 <span className="text-emerald-400 font-semibold">Zero Gateway Fees</span>
               </p>

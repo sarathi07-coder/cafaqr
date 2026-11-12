@@ -103,7 +103,9 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
       billUrl,
       logoSrc: `${origin}/krish_logo.png`,
       mascotSrc: `${origin}/krish_chef_mascot.png`,
-      tableDisplay: String(receipt.tableNumber || '1').padStart(2, '0'),
+      tableDisplay: Number(receipt.tableNumber) === 0
+        ? 'PARCEL'
+        : String(receipt.tableNumber ?? '1').padStart(2, '0'),
       guestName: String(receipt.customerName || 'WALK-IN GUEST').toUpperCase(),
       guestsCount: receipt.guestsCount || 1,
       items,

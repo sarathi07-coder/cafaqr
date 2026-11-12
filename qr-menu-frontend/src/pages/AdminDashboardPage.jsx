@@ -55,6 +55,14 @@ import ThermalReceiptModal from '../components/ThermalReceiptModal';
 import { api } from '../api';
 import { socket } from '../socket';
 import { parseUtcTimestamp } from '../utils/time';
+import {
+  isParcelTable,
+  getOrdinalTableLabel,
+  formatTableLabel,
+  formatTableShort,
+  downloadStandeeQrPng,
+  downloadStandeeQrSvg,
+} from '../utils/tableDisplay';
 
 class TabErrorBoundary extends React.Component {
   constructor(props) {
@@ -963,9 +971,9 @@ export default function AdminDashboardPage() {
       const res = await api.settleEntireTable(snapshotTable.tableId, settleMethod);
       setActiveReceipt(buildReceiptSnapshot({
         orderId: sections[0]?.orderId || snapshotTable.tableId,
-        receiptNumber: `T${String(snapshotTable.tableNumber).padStart(2, '0')}-${Date.now().toString().slice(-4)}`,
+        receiptNumber: `${formatTableShort(snapshotTable.tableNumber)}-${Date.now().toString().slice(-4)}`,
         tableNumber: snapshotTable.tableNumber,
-        customerName: guestNames.join(', ') || `Table ${snapshotTable.tableNumber}`,
+        customerName: guestNames.join(', ') || formatTableLabel(snapshotTable.tableNumber),
         guestsCount: snapshotTable.activeCustomersCount || sections.length || 1,
         items: mergedItems,
         subtotal: combinedSubtotal,
@@ -975,7 +983,7 @@ export default function AdminDashboardPage() {
         statusText: 'PAID',
         isCombinedTable: true,
       }));
-      setToastMessage(`Table #${snapshotTable.tableNumber} session ended via ${settleMethod}! (${res.settledOrdersCount} diner sessions)`);
+      setToastMessage(`${formatTableLabel(snapshotTable.tableNumber)} session ended via ${settleMethod}! (${res.settledOrdersCount} diner sessions)`);
       setSettleTableTarget(null);
       await loadAllData(restaurantId);
     } catch (err) {
@@ -1210,7 +1218,9 @@ export default function AdminDashboardPage() {
                 </div>
                 <div className="flex items-baseline gap-2">
                   <p className="text-3xl font-black text-stone-950 tracking-tight">
-                    {todayKPI?.highestEarningTable ? `Table #${todayKPI.highestEarningTable.tableNumber}` : 'Table #1'}
+                    {todayKPI?.highestEarningTable
+                      ? formatTableLabel(todayKPI.highestEarningTable.tableNumber)
+                      : 'Table #1'}
                   </p>
                 </div>
                 <p className="text-[11px] text-amber-800 font-semibold mt-2">
@@ -1553,7 +1563,7 @@ export default function AdminDashboardPage() {
                             </span>
                             <div>
                               <span className="text-xs font-bold text-stone-900">
-                                Table #{t.tableNumber}
+                                {formatTableLabel(t.tableNumber)}
                               </span>
                               <p className="text-[10px] text-stone-500">
                                 {t.ordersCount} orders &bull; {t.sessionsCount} diners
@@ -1688,13 +1698,21 @@ export default function AdminDashboardPage() {
                       {/* Table Header Bar */}
                       <div className="bg-stone-900 text-white px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-11 h-11 rounded-2xl bg-amber-500 text-stone-950 font-black text-xl flex items-center justify-center shrink-0">
-                            🪑
+                          <div className={`w-11 h-11 rounded-2xl font-black text-xl flex items-center justify-center shrink-0 ${
+                            isParcelTable(table.tableNumber)
+                              ? 'bg-emerald-500 text-stone-950'
+                              : 'bg-amber-500 text-stone-950'
+                          }`}>
+                            {isParcelTable(table.tableNumber) ? '🛍️' : '🪑'}
                           </div>
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="font-black text-lg uppercase tracking-tight text-amber-400">
-                                TABLE T{String(table.tableNumber).padStart(2, '0')}
+                              <h4 className={`font-black text-lg uppercase tracking-tight ${
+                                isParcelTable(table.tableNumber) ? 'text-emerald-400' : 'text-amber-400'
+                              }`}>
+                                {isParcelTable(table.tableNumber)
+                                  ? 'PARCEL / TAKEAWAY'
+                                  : `TABLE ${formatTableShort(table.tableNumber)} (${getOrdinalTableLabel(table.tableNumber)})`}
                               </h4>
                               <span className="text-xs bg-stone-800 text-stone-300 font-semibold px-2.5 py-0.5 rounded-full border border-stone-700">
                                 {table.activeCustomersCount} Active Customer{table.activeCustomersCount > 1 ? 's' : ''}
@@ -1873,8 +1891,12 @@ export default function AdminDashboardPage() {
                     >
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-stone-900 bg-amber-200/80 px-2.5 py-1 rounded-lg">
-                            Table #{order.table_number || '1'}
+                          <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${
+                            isParcelTable(order.table_number)
+                              ? 'text-emerald-950 bg-emerald-200'
+                              : 'text-stone-900 bg-amber-200/80'
+                          }`}>
+                            {formatTableLabel(order.table_number)}
                           </span>
                           {order.session_label && (
                             <span className="text-xs font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-md border border-sky-200">
@@ -1943,7 +1965,7 @@ export default function AdminDashboardPage() {
                         <button
                           onClick={() => setActiveReceipt(buildReceiptSnapshot({
                             orderId: order.id,
-                            tableNumber: order.table_number || '1',
+                            tableNumber: order.table_number !== undefined && order.table_number !== null ? order.table_number : '1',
                             customerName: order.customer_name || 'Guest',
                             items: order.items || [],
                             subtotal: order.subtotal,
@@ -2234,96 +2256,169 @@ export default function AdminDashboardPage() {
         {/* TAB 5: TABLES & QR STUDIO */}
         {activeTab === 'tables' && (
           <TabErrorBoundary>
-          <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-6 animate-fade-in">
-            <div className="flex items-center justify-between pb-4 border-b border-stone-100">
-              <div>
-                <h3 className="font-serif font-bold text-base text-stone-900">
-                  Table QR Code Studio
-                </h3>
-                <p className="text-xs text-stone-500">
-                  Preview and download individual PNG/SVG vector QR codes or print bulk sticker sheets.
-                </p>
-              </div>
+          {(() => {
+            const allTables = Array.isArray(tables) ? tables : [];
+            const parcelTables = allTables.filter((tbl) => Boolean(tbl.isParcel) || isParcelTable(tbl.tableNumber ?? tbl.number));
+            const dineInTables = allTables.filter((tbl) => !Boolean(tbl.isParcel) && !isParcelTable(tbl.tableNumber ?? tbl.number));
 
-              <button
-                onClick={() => window.print()}
-                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 font-bold text-xs text-stone-950 rounded-xl transition flex items-center gap-1.5 shadow-xs"
-              >
-                <Download className="w-4 h-4" />
-                <span>Print Sticker Sheets</span>
-              </button>
-            </div>
+            const renderQrCard = (tbl, parcelCard = false) => {
+              const tableIdVal = tbl.tableId || tbl.table_id || tbl.id;
+              const tableNumVal = tbl.tableNumber ?? tbl.table_number ?? tbl.number;
+              const qrSrc = tbl.qrCodeDataUrl || tbl.qr_data_url || tbl.qr_code_url || `/api/qr/${tableIdVal}`;
+              const orderLink = parcelCard
+                ? `/order?tableId=${tableIdVal}&tableNumber=0&orderType=PARCEL`
+                : `/order?tableId=${tableIdVal}&tableNumber=${tableNumVal}`;
+              const primaryLabel = parcelCard ? 'PARCEL / TAKEAWAY' : `TABLE ${tableNumVal}`;
+              const secondaryLabel = parcelCard ? 'Takeaway Counter' : getOrdinalTableLabel(tableNumVal);
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-              {(Array.isArray(tables) ? tables : []).map((tbl) => {
-                const tableIdVal = tbl.tableId || tbl.table_id || tbl.id;
-                const tableNumVal = tbl.tableNumber || tbl.table_number || tbl.number;
-                const qrSrc = tbl.qrCodeDataUrl || tbl.qr_data_url || tbl.qr_code_url || `/api/qr/${tableIdVal}`;
-                const orderLink = `/order?tableId=${tableIdVal}&tableNumber=${tableNumVal}`;
+              return (
+                <div
+                  key={tableIdVal}
+                  className={`p-5 rounded-3xl text-center flex flex-col items-center justify-between shadow-xl border relative overflow-hidden ${
+                    parcelCard
+                      ? 'bg-emerald-950 border-emerald-400/40'
+                      : 'bg-stone-900 border-amber-500/25'
+                  }`}
+                >
+                  {/* Clean Printable Standee Card Face: ONLY Restaurant Name + QR Code + Table / Parcel Info */}
+                  <div className="w-full rounded-2xl bg-white p-5 shadow-lg border border-stone-200 flex flex-col items-center">
+                    <p className="font-serif font-black text-sm text-stone-900 tracking-wide uppercase pb-2.5 mb-3 border-b border-stone-200 w-full">
+                      KRISH Cafe &amp; Restaurant
+                    </p>
 
-                return (
-                  <div
-                    key={tableIdVal}
-                    className="p-5 rounded-3xl bg-stone-900 border border-amber-500/20 text-center flex flex-col items-center justify-between shadow-xl relative overflow-hidden"
-                  >
-                    {/* Branded Stand Header */}
-                    <div className="w-full flex items-center justify-between pb-3 border-b border-white/10">
-                      <div className="flex items-center gap-1.5">
-                        <img src="/krish_logo.png" alt="KRISH Logo" className="h-6 w-auto object-contain" />
-                        <span className="font-serif font-black text-xs text-amber-300 tracking-tight">KRISH</span>
-                      </div>
-                      <span className="text-xs font-black uppercase text-stone-950 bg-amber-400 px-2.5 py-0.5 rounded-lg shadow-sm">
-                        TABLE #{tableNumVal}
-                      </span>
-                    </div>
+                    <img
+                      src={qrSrc}
+                      alt={parcelCard ? 'Parcel Takeaway QR' : `${secondaryLabel} QR`}
+                      className="w-44 h-44 mx-auto object-contain"
+                    />
 
-                    <div className="my-3 p-4 bg-white rounded-2xl shadow-lg border border-stone-100 flex flex-col items-center w-full">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-stone-700 mb-2">
-                        Scan with GPay / PhonePe / Camera
+                    <div className="w-full pt-3 mt-3 border-t border-stone-200">
+                      <p className={`font-black text-base tracking-wide ${
+                        parcelCard ? 'text-emerald-800' : 'text-stone-950'
+                      }`}>
+                        {primaryLabel}
                       </p>
-                      <img
-                        src={qrSrc}
-                        alt={`Table ${tableNumVal} QR`}
-                        className="w-40 h-40 mx-auto object-contain"
-                      />
-                      <p className="text-[10px] text-stone-500 font-bold mt-2">
-                        Order & Pay Instantly via UPI
+                      <p className={`text-xs font-bold mt-0.5 ${
+                        parcelCard ? 'text-emerald-600' : 'text-amber-700'
+                      }`}>
+                        {secondaryLabel}
                       </p>
-                    </div>
-
-                    <div className="w-full space-y-2 pt-1">
-                      <div className="flex gap-2 w-full">
-                        <a
-                          href={`/api/qr/${tableIdVal}`}
-                          download={`krish_table_${tableNumVal}_qr.png`}
-                          className="flex-1 py-2 bg-stone-800 hover:bg-stone-700 text-amber-300 text-[11px] font-bold rounded-xl transition text-center border border-white/10"
-                        >
-                          Download PNG
-                        </a>
-                        <a
-                          href={`/api/qr/${tableIdVal}?format=svg`}
-                          download={`krish_table_${tableNumVal}_qr.svg`}
-                          className="flex-1 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 text-[11px] font-bold rounded-xl transition text-center border border-white/10"
-                        >
-                          Vector SVG
-                        </a>
-                      </div>
-
-                      <a
-                        href={orderLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-full py-2.5 krish-gradient-gold text-stone-950 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 shadow-md active:scale-98"
-                      >
-                        <span>Open Diner Menu (Table {tableNumVal})</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+
+                  {/* Download & Preview Controls (Outside printed standee card face) */}
+                  <div className="w-full space-y-2 pt-4">
+                    <div className="flex gap-2 w-full">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await downloadStandeeQrPng({
+                              restaurantName: 'KRISH Cafe & Restaurant',
+                              tableNumber: tableNumVal,
+                              isParcel: parcelCard,
+                              qrCodeSvg: tbl.qrCodeSvg,
+                              qrCodeDataUrl: qrSrc,
+                            });
+                            setToastMessage(`✅ Downloaded ${parcelCard ? 'Parcel / Takeaway' : secondaryLabel} QR card!`);
+                          } catch (err) {
+                            alert(err.message || 'Failed to generate downloadable QR PNG');
+                          }
+                        }}
+                        className={`flex-1 py-2.5 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-98 ${
+                          parcelCard
+                            ? 'bg-emerald-400 hover:bg-emerald-300 text-stone-950'
+                            : 'bg-amber-400 hover:bg-amber-300 text-stone-950'
+                        }`}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download PNG</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          downloadStandeeQrSvg({
+                            tableNumber: tableNumVal,
+                            isParcel: parcelCard,
+                            qrCodeSvg: tbl.qrCodeSvg,
+                            qrCodeDataUrl: qrSrc,
+                          });
+                          setToastMessage(`✅ Downloaded ${parcelCard ? 'Parcel' : secondaryLabel} vector SVG!`);
+                        }}
+                        className="px-3.5 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold rounded-xl transition border border-white/10 cursor-pointer"
+                      >
+                        SVG
+                      </button>
+                    </div>
+
+                    <a
+                      href={orderLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full py-2 bg-white/10 hover:bg-white/15 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 border border-white/10"
+                    >
+                      <span>{parcelCard ? 'Open Parcel / Takeaway Menu' : `Open Menu (${secondaryLabel})`}</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
+              );
+            };
+
+            return (
+              <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-6 animate-fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-100">
+                  <div>
+                    <h3 className="font-serif font-bold text-base text-stone-900">
+                      Table &amp; Parcel QR Studio ({dineInTables.length} Tables + {parcelTables.length} Parcel)
+                    </h3>
+                    <p className="text-xs text-stone-500">
+                      Each downloadable card shows only the restaurant name, QR scanner, and table or parcel label.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 font-bold text-xs text-stone-950 rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer self-start sm:self-auto"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Print All QR Cards</span>
+                  </button>
+                </div>
+
+                {/* Dedicated Parcel / Takeaway Scanner Section */}
+                {parcelTables.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                        <span>🛍️ Parcel / Takeaway Counter QR Scanner</span>
+                      </h4>
+                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                        Opens menu directly in Parcel Mode
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+                      {parcelTables.map((tbl) => renderQrCard(tbl, true))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 15 Dining Tables Section */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-stone-700">
+                      🪑 Dining Table QR Cards (1st Table – {getOrdinalTableLabel(dineInTables.length || 15)})
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+                    {dineInTables.map((tbl) => renderQrCard(tbl, false))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           </TabErrorBoundary>
         )}
 
@@ -3058,13 +3153,13 @@ export default function AdminDashboardPage() {
                       className="p-4 rounded-2xl bg-emerald-50/40 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                          T{notice.tableNumber}
+                        <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                          {formatTableShort(notice.tableNumber)}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-stone-900 text-sm">
-                              Table #{notice.tableNumber}
+                              {formatTableLabel(notice.tableNumber)}
                             </span>
                             <span className="text-sm font-black text-emerald-800">
                               ₹{parseFloat(notice.amount || 0).toFixed(2)}
@@ -3244,7 +3339,11 @@ export default function AdminDashboardPage() {
               </span>
               <h3 className="font-serif font-black text-lg text-stone-900 mt-1.5 flex items-center gap-2">
                 <span>⚡</span>
-                <span>Table T{String(settleTableTarget.tableNumber).padStart(2, '0')} Entire Bill</span>
+                <span>
+                  {isParcelTable(settleTableTarget.tableNumber)
+                    ? 'Parcel / Takeaway Entire Bill'
+                    : `Table ${formatTableShort(settleTableTarget.tableNumber)} Entire Bill`}
+                </span>
               </h3>
               <p className="text-xs text-stone-500 mt-0.5">
                 Settles all <strong className="text-stone-900">{settleTableTarget.activeCustomersCount} active customer tabs</strong> together in a single transaction.

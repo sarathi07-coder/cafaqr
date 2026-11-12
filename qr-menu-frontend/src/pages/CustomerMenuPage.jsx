@@ -23,6 +23,7 @@ import ServiceCallModal from '../components/ServiceCallModal';
 import FeedbackModal from '../components/FeedbackModal';
 import UpiPaymentModal from '../components/UpiPaymentModal';
 import KrishLogo from '../components/KrishLogo';
+import { isParcelTable, formatTableLabel } from '../utils/tableDisplay';
 import { useCart } from '../context/CartContext';
 import { api } from '../api';
 import { socket } from '../socket';
@@ -104,7 +105,11 @@ const RESTAURANT_CATEGORIES = new Set([
 export default function CustomerMenuPage() {
   const [searchParams] = useSearchParams();
   const urlTableId = searchParams.get('tableId') || '';
-  const urlTableNumber = searchParams.get('tableNumber') || '1';
+  const urlOrderType = searchParams.get('orderType') || '';
+  const rawUrlTableNumber = searchParams.get('tableNumber');
+  const urlTableNumber = rawUrlTableNumber !== null
+    ? rawUrlTableNumber
+    : (urlOrderType.toUpperCase() === 'PARCEL' ? '0' : '1');
 
   const {
     tableId,
@@ -210,7 +215,9 @@ export default function CustomerMenuPage() {
             if (data.table) {
               if (!effectiveTableId) effectiveTableId = data.table.id;
               if (!effectiveRestId) effectiveRestId = data.table.restaurant_id;
-              if (data.table.number && !urlTableNumber) setTableNumber(data.table.number);
+              if (data.table.number !== undefined && data.table.number !== null && rawUrlTableNumber === null) {
+                setTableNumber(data.table.number);
+              }
             }
           } catch (e) {
             console.warn('Fallback table fetch warning:', e);
@@ -219,12 +226,12 @@ export default function CustomerMenuPage() {
 
         if (effectiveTableId) {
           setTableId(effectiveTableId);
-          if (urlTableNumber) setTableNumber(urlTableNumber);
+          if (rawUrlTableNumber !== null || urlOrderType) setTableNumber(urlTableNumber);
           const sessData = await checkSession(effectiveTableId);
           if (sessData?.table?.restaurant_id) {
             effectiveRestId = sessData.table.restaurant_id;
           }
-          if (sessData?.table?.number && !urlTableNumber) {
+          if (sessData?.table?.number !== undefined && sessData?.table?.number !== null && rawUrlTableNumber === null) {
             setTableNumber(sessData.table.number);
           }
         }
@@ -452,7 +459,8 @@ export default function CustomerMenuPage() {
       {/* Top Navbar */}
       <Navbar
         restaurantName="KRISH Cafe & Restaurant"
-        tableNumber={tableNumber}
+        tableNumber={tableNumber !== undefined && tableNumber !== null && tableNumber !== '' ? tableNumber : urlTableNumber}
+        orderType={urlOrderType}
         sessionLabel={sessionLabel}
         customerName={customerName}
         hasActiveSession={hasActiveSession}
@@ -461,6 +469,16 @@ export default function CustomerMenuPage() {
         onViewBill={() => setIsCartOpen(true)}
         onCallWaiter={() => setIsServiceModalOpen(true)}
       />
+
+      {isParcelTable(tableNumber, urlOrderType) && (
+        <div className="bg-emerald-950/90 border-b border-emerald-500/40 px-4 py-2.5 text-center">
+          <div className="max-w-5xl mx-auto flex items-center justify-center gap-2 text-xs sm:text-sm font-black text-emerald-200 tracking-wide">
+            <span>🛍️ PARCEL / TAKEAWAY ORDER</span>
+            <span className="text-emerald-400">&bull;</span>
+            <span className="font-semibold text-emerald-100">Freshly Packed at Takeaway Counter</span>
+          </div>
+        </div>
+      )}
 
       {/* Hero Welcome & Brand Atmosphere Section */}
       <div className="relative py-7 px-4 border-b border-white/10 overflow-hidden">
@@ -599,7 +617,7 @@ export default function CustomerMenuPage() {
                       Welcome, {customerName || activeOrder?.customer_name || 'Diner'}!
                     </span>
                     <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full">
-                      Table #{tableNumber || '1'} &bull; {sessionLabel || 'Customer 1'} Tab
+                      {formatTableLabel(tableNumber, urlOrderType)} &bull; {sessionLabel || 'Customer 1'} Tab
                     </span>
                   </div>
                   <p className="text-xs text-stone-300 mt-0.5 font-mono">
@@ -863,7 +881,7 @@ export default function CustomerMenuPage() {
           onClose={() => setIsUpiModalOpen(false)}
           amount={upiPaymentData.amount || parseFloat(activeOrder?.total || activeOrder?.total_amount || 0)}
           tableId={tableId || ''}
-          tableNumber={tableNumber || '1'}
+          tableNumber={tableNumber !== undefined && tableNumber !== null && tableNumber !== '' ? tableNumber : urlTableNumber}
           orderId={upiPaymentData.orderId || activeOrder?.id}
           sessionToken={sessionToken || ''}
           customerName={customerName || ''}
@@ -880,7 +898,7 @@ export default function CustomerMenuPage() {
           isOpen={isServiceModalOpen}
           onClose={() => setIsServiceModalOpen(false)}
           tableId={tableId || ''}
-          tableNumber={tableNumber || '1'}
+          tableNumber={tableNumber !== undefined && tableNumber !== null && tableNumber !== '' ? tableNumber : urlTableNumber}
           sessionToken={sessionToken || ''}
           sessionLabel={sessionLabel || 'Customer 1'}
           customerName={customerName || ''}

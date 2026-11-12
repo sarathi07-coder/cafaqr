@@ -21,6 +21,7 @@ import KrishLogo from '../components/KrishLogo';
 import { api } from '../api';
 import { socket } from '../socket';
 import { parseUtcTimestamp } from '../utils/time';
+import { isParcelTable, formatTableLabel } from '../utils/tableDisplay';
 
 export default function KitchenPage() {
   const [tickets, setTickets] = useState([]);
@@ -227,10 +228,11 @@ export default function KitchenPage() {
       const nextStatusMap = new Map();
       safeTickets.forEach((t) => {
         const itemCount = (t.items || []).reduce((sum, it) => sum + Number(it.quantity || 1), 0);
+        const resolvedNum = t.table_number ?? t.tableNumber ?? '1';
         nextStatusMap.set(t.id, {
           status: t.status,
           itemCount,
-          tableNumber: t.table_number || t.tableNumber || '1',
+          tableNumber: resolvedNum,
         });
       });
 
@@ -270,13 +272,13 @@ export default function KitchenPage() {
 
         if (newlyReady) {
           playKitchenChime('READY');
-          showKitchenBanner('READY', `🔔 Food Ready for Table #${newlyReady.table_number || newlyReady.tableNumber || '1'}!`);
-        } else if (remotelyServedTable) {
+          showKitchenBanner('READY', `🔔 Food Ready for ${formatTableLabel(newlyReady.table_number ?? newlyReady.tableNumber)}!`);
+        } else if (remotelyServedTable !== null) {
           playKitchenChime('SERVED');
-          showKitchenBanner('SERVED', `✅ Food Served for Table #${remotelyServedTable}!`);
+          showKitchenBanner('SERVED', `✅ Food Served for ${formatTableLabel(remotelyServedTable)}!`);
         } else if (newlyPending) {
           playKitchenChime('NEW_ORDER');
-          showKitchenBanner('NEW_ORDER', `🔥 New Order for Table #${newlyPending.table_number || newlyPending.tableNumber || '1'}!`);
+          showKitchenBanner('NEW_ORDER', `🔥 New Order for ${formatTableLabel(newlyPending.table_number ?? newlyPending.tableNumber)}!`);
         }
       } else {
         isInitialLoadRef.current = false;
@@ -390,7 +392,8 @@ export default function KitchenPage() {
   // Advance ticket stage & immediately trigger READY / SERVED sound alerts
   const handleAdvance = async (ticket) => {
     const orderId = typeof ticket === 'string' ? ticket : (ticket?.id || ticket?.order_id);
-    const tableNum = (typeof ticket === 'object' && (ticket?.table_number || ticket?.tableNumber)) || '1';
+    const rawTableNum = typeof ticket === 'object' ? (ticket?.table_number ?? ticket?.tableNumber) : '1';
+    const targetLabel = formatTableLabel(rawTableNum);
     if (!orderId || orderId === 'undefined') {
       console.error('Cannot advance ticket with invalid ID:', ticket);
       return;
@@ -403,11 +406,11 @@ export default function KitchenPage() {
       if (nextStatus === 'READY') {
         localTransitionRef.current.add(`${orderId}:READY`);
         playKitchenChime('READY');
-        showKitchenBanner('READY', `🔔 Food Ready for Table #${tableNum}!`);
+        showKitchenBanner('READY', `🔔 Food Ready for ${targetLabel}!`);
       } else if (nextStatus === 'SERVED') {
         localTransitionRef.current.add(`${orderId}:SERVED`);
         playKitchenChime('SERVED');
-        showKitchenBanner('SERVED', `✅ Food Served for Table #${tableNum}!`);
+        showKitchenBanner('SERVED', `✅ Food Served for ${targetLabel}!`);
       }
 
       setTickets((prev) =>
@@ -1038,8 +1041,14 @@ function KDSTicketCard({ ticket, onAdvance, nextLabel, nextColor, isCompleted })
         <div className="flex items-center justify-between pb-3 border-b border-white/10">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-base font-black text-amber-300 bg-amber-400/15 px-2.5 py-1 rounded-xl border border-amber-400/30">
-                Table #{ticket.table_number || ticket.tableNumber || '1'}
+              <span className={`text-base font-black px-2.5 py-1 rounded-xl border ${
+                isParcelTable(ticket.table_number ?? ticket.tableNumber)
+                  ? 'text-emerald-200 bg-emerald-500/25 border-emerald-400/50'
+                  : 'text-amber-300 bg-amber-400/15 border-amber-400/30'
+              }`}>
+                {isParcelTable(ticket.table_number ?? ticket.tableNumber)
+                  ? '🛍️ PARCEL / TAKEAWAY'
+                  : formatTableLabel(ticket.table_number ?? ticket.tableNumber)}
               </span>
               <span className="text-xs text-stone-500 font-mono">
                 #{String(ticket.id || '').slice(0, 6)}

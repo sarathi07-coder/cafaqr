@@ -76,7 +76,7 @@ const bulkQrHandler = async (c) => {
     }
 
     const tablesRes = await c.env.DB.prepare(
-      'SELECT id, number, restaurant_id FROM tables WHERE restaurant_id = ? ORDER BY number ASC'
+      'SELECT id, number, restaurant_id FROM tables WHERE restaurant_id = ? ORDER BY CASE WHEN number = 0 THEN 0 ELSE 1 END ASC, number ASC'
     )
       .bind(rest.id)
       .all();
@@ -85,7 +85,10 @@ const bulkQrHandler = async (c) => {
 
     const bulkQrs = await Promise.all(
       tables.map(async (table) => {
-        const orderUrl = `${clientBaseUrl}/order?tableId=${table.id}&tableNumber=${table.number}`;
+        const isParcel = Number(table.number) === 0;
+        const orderUrl = isParcel
+          ? `${clientBaseUrl}/order?tableId=${table.id}&tableNumber=0&orderType=PARCEL`
+          : `${clientBaseUrl}/order?tableId=${table.id}&tableNumber=${table.number}`;
         const svg = await renderSvgString(orderUrl);
         const qrDataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
@@ -94,6 +97,8 @@ const bulkQrHandler = async (c) => {
           id: table.id,
           tableNumber: table.number,
           number: table.number,
+          isParcel,
+          label: isParcel ? 'Parcel / Takeaway' : `Table #${table.number}`,
           orderUrl,
           qrCodeDataUrl: qrDataUrl,
           qrCodeSvg: svg,
@@ -143,7 +148,10 @@ qr.get('/:tableId', async (c) => {
       return c.json({ error: 'Table not found' }, 404);
     }
 
-    const orderUrl = `${clientBaseUrl}/order?tableId=${table.id}&tableNumber=${table.number}`;
+    const isParcel = Number(table.number) === 0;
+    const orderUrl = isParcel
+      ? `${clientBaseUrl}/order?tableId=${table.id}&tableNumber=0&orderType=PARCEL`
+      : `${clientBaseUrl}/order?tableId=${table.id}&tableNumber=${table.number}`;
     const svg = await renderSvgString(orderUrl, { dark, light });
 
     const headers = {
@@ -152,7 +160,8 @@ qr.get('/:tableId', async (c) => {
     };
 
     if (download || format === 'download') {
-      headers['Content-Disposition'] = `attachment; filename="table_${table.number}_qr.svg"`;
+      const filename = isParcel ? 'krish_parcel_takeaway_qr.svg' : `krish_table_${table.number}_qr.svg`;
+      headers['Content-Disposition'] = `attachment; filename="${filename}"`;
     }
 
     return new Response(svg, { status: 200, headers });

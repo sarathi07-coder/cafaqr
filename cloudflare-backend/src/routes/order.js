@@ -83,6 +83,7 @@ order.get('/tables/default', async (c) => {
       `SELECT t.id, t.number, t.restaurant_id, r.name as restaurant_name, r.currency, r.upi_id, r.upi_name
        FROM tables t
        JOIN restaurants r ON t.restaurant_id = r.id
+       WHERE t.number > 0
        ORDER BY t.number ASC LIMIT 1`
     ).first();
 
@@ -693,13 +694,15 @@ order.get('/upi-info', async (c) => {
       restaurant = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name, upi_enabled FROM restaurants LIMIT 1').first();
     }
 
+    const parsedTableNumber = tableNumber !== undefined && tableNumber !== null && tableNumber !== '' ? Number(tableNumber) : null;
+
     if (!restaurant) {
       return c.json({
         upiEnabled: false,
         upiId: '',
         upiName: 'KRISH Cafe & Restaurant',
         restaurantName: 'KRISH Cafe & Restaurant',
-        tableNumber: tableNumber ? Number(tableNumber) : null,
+        tableNumber: parsedTableNumber,
       });
     }
 
@@ -711,7 +714,7 @@ order.get('/upi-info', async (c) => {
       upiId: isEnabled ? cleanUpiId : '',
       upiName: restaurant.upi_name || restaurant.name || 'KRISH Cafe & Restaurant',
       restaurantName: restaurant.name || 'KRISH Cafe & Restaurant',
-      tableNumber: tableNumber ? Number(tableNumber) : null,
+      tableNumber: parsedTableNumber,
       restaurantId: restaurant.id,
     });
   } catch (err) {
@@ -753,7 +756,7 @@ order.post('/upi/notify', async (c) => {
       message: 'Payment notification submitted to cashier!',
       utr,
       orderId: orderId || null,
-      tableNumber: tableNumber || null,
+      tableNumber: tableNumber !== undefined && tableNumber !== null ? tableNumber : null,
     });
   } catch (err) {
     console.error('UPI notify error:', err);
@@ -1001,8 +1004,10 @@ order.put('/table/:tableId/settle-all', async (c) => {
       .bind(tableId)
       .run();
 
+    const firstTableNum = activeOrders[0]?.table_number;
+    const settledTargetLabel = Number(firstTableNum) === 0 ? 'Parcel / Takeaway' : `Table #${firstTableNum ?? ''}`;
     return c.json({
-      message: `Table #${activeOrders[0]?.table_number || ''} fully settled and released.`,
+      message: `${settledTargetLabel} fully settled and released.`,
       ordersSettledCount: activeOrders.length,
       combinedSubtotal,
       combinedTax,
@@ -1191,7 +1196,7 @@ order.get('/receipt/:code', async (c) => {
       restaurantName: anchor.restaurant_name || 'KRISH Cafe & Restaurant',
       address: anchor.restaurant_address || 'Rathinam College Front Gate, Eachanari, Coimbatore - 641021',
       phone: anchor.restaurant_phone || '8760633322',
-      tableNumber: anchor.table_number || 1,
+      tableNumber: anchor.table_number !== null && anchor.table_number !== undefined ? anchor.table_number : 1,
       customerName: guestNames.join(', ') || anchor.customer_name || 'Guest',
       guestsCount: targetOrders.length || 1,
       paymentMethod: anchor.payment_method || (anchor.status === 'PAID' ? 'CASH' : 'UNPAID'),
