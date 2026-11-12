@@ -722,13 +722,14 @@ admin.put('/menu/:id', async (c) => {
   }
 });
 
-// DELETE /api/admin/menu/:id (Delete Menu Item)
+// DELETE /api/admin/menu/:id (Delete Menu Item, detaching historical order references cleanly)
 admin.delete('/menu/:id', async (c) => {
   const itemId = c.req.param('id');
   try {
     const existing = await c.env.DB.prepare('SELECT id, name FROM menu_items WHERE id = ?').bind(itemId).first();
     if (!existing) return c.json({ error: 'Menu item not found' }, 404);
 
+    await c.env.DB.prepare('UPDATE order_items SET menu_item_id = NULL WHERE menu_item_id = ?').bind(itemId).run();
     await c.env.DB.prepare('DELETE FROM menu_items WHERE id = ?').bind(itemId).run();
     return c.json({ success: true, message: 'Deleted', item: existing });
   } catch (err) {
