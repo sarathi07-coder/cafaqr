@@ -165,10 +165,12 @@ export default function BillViewPage() {
                   <span>-₹{Number(bill.discountAmount).toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between">
-                <span>TAX (5% GST):</span>
-                <span>₹{Number(bill.taxAmount || 0).toFixed(2)}</span>
-              </div>
+              {Number(bill.taxAmount || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>TAX (GST):</span>
+                  <span>₹{Number(bill.taxAmount || 0).toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-base font-bold pt-1">
                 <span>TOTAL:</span>
                 <span>₹{Number(bill.total || 0).toFixed(2)}</span>

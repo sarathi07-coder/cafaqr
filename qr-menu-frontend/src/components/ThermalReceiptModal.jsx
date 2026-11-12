@@ -295,10 +295,11 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
       <span class="left">DISCOUNT:</span>
       <span class="right">-₹${normalized.discountAmount.toFixed(2)}</span>
     </div>` : ''}
+    ${normalized.taxAmount > 0 ? `
     <div class="row">
-      <span class="left">TAX (5% GST):</span>
+      <span class="left">TAX (GST):</span>
       <span class="right">₹${normalized.taxAmount.toFixed(2)}</span>
-    </div>
+    </div>` : ''}
     <div class="row total-row">
       <span class="left">TOTAL:</span>
       <span class="right">₹${normalized.total.toFixed(2)}</span>
@@ -469,10 +470,12 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
                   <span>-₹{normalized.discountAmount.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between">
-                <span>TAX (5% GST):</span>
-                <span>₹{normalized.taxAmount.toFixed(2)}</span>
-              </div>
+              {normalized.taxAmount > 0 && (
+                <div className="flex justify-between">
+                  <span>TAX (GST):</span>
+                  <span>₹{normalized.taxAmount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-[13.5px] font-bold pt-1">
                 <span>TOTAL:</span>
                 <span>₹{normalized.total.toFixed(2)}</span>

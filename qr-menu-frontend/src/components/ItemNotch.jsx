@@ -47,7 +47,6 @@ export default function ItemNotch({ onOpenCart, onOpenActiveBill, onOpenUpiModal
                 </div>
                 <p className="text-base font-extrabold text-white tracking-tight leading-none mt-0.5 font-mono tabular-nums">
                   ₹{Number(grandTotal || 0).toFixed(2)}
-                  <span className="text-[10px] text-stone-400 font-sans font-normal ml-1">(inc. 5% GST)</span>
                 </p>
               </div>
             </>

@@ -157,8 +157,10 @@ async function runMasterSuite() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (!data.order?.id) throw new Error('Order creation failed');
+    if (Number(data.order.taxAmount || 0) !== 0) throw new Error(`Expected 0 GST tax, got ₹${data.order.taxAmount}`);
+    if (Number(data.order.total) !== Number(data.order.subtotal)) throw new Error(`Expected total == subtotal (${data.order.subtotal}), got ${data.order.total}`);
     testOrderId = data.order.id;
-    return `Ticket #${testOrderId.slice(0, 8)} | Total: ₹${data.order.total}`;
+    return `Ticket #${testOrderId.slice(0, 8)} | Total: ₹${data.order.total} (Tax: ₹${data.order.taxAmount})`;
   });
 
   await testStep('Add Round 2 Dishes to Tab (POST /order/:id/items)', async () => {

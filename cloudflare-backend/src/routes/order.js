@@ -326,7 +326,7 @@ async function recalculateOrderTotals(db, orderId, restaurantId) {
     ).bind(orderId).first()
   ]);
 
-  const taxPercentage = rest?.tax_percentage != null ? Number(rest.tax_percentage) : 5.0;
+  const taxPercentage = rest?.tax_percentage != null ? Number(rest.tax_percentage) : 0;
   const rawSubtotal = Number(sumRes?.subtotal || 0);
 
   let discountAmount = 0;
@@ -434,7 +434,7 @@ order.post('/', async (c) => {
       await c.env.DB.prepare(
         `INSERT INTO orders (id, restaurant_id, table_id, customer_id, session_id, session_token, session_label, status, notes, subtotal, tax_percentage, tax_amount, total)
          VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, 0, ?, 0, 0)`
-      ).bind(orderId, restaurantId, tableId, customerId, sId, sToken, sLabel, notes || null, Number(table.tax_percentage || 5.0)).run();
+      ).bind(orderId, restaurantId, tableId, customerId, sId, sToken, sLabel, notes || null, Number(table.tax_percentage ?? 0)).run();
     } else {
       if (notes) {
         await c.env.DB.prepare("UPDATE orders SET notes = COALESCE(notes || '; ', '') || ? WHERE id = ?").bind(notes, orderId).run();
@@ -531,7 +531,7 @@ order.post('/:id/items', async (c) => {
           ord.session_id || null,
           ord.session_token || null,
           ord.session_label || 'Customer',
-          Number(ord.tax_percentage ?? 5.0)
+          Number(ord.tax_percentage ?? 0)
         ).run();
       }
     }

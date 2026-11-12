@@ -2657,18 +2657,18 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-5">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 flex flex-col items-center justify-center font-serif font-black shadow-xs">
-                    <span className="text-xl leading-none">{reviewsAI?.averageRating || 4.9}</span>
+                    <span className="text-xl leading-none">{reviewsAI?.averageRating ?? 0}</span>
                     <span className="text-[10px] text-amber-700/80 font-sans font-bold">/ 5.0</span>
                   </div>
                   <div>
                     <h3 className="font-serif font-bold text-lg text-stone-900 flex items-center gap-2">
                       <span>Diner Reviews & AI Intelligence</span>
                       <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-sans font-bold">
-                        {reviewsAI?.goodPercentage || 98}% Positive
+                        {reviewsAI?.goodPercentage ?? 0}% Positive
                       </span>
                     </h3>
                     <p className="text-xs text-stone-500">
-                      Based on {reviewsAI?.totalReviews || (Array.isArray(feedbackList) ? feedbackList : []).length || 0} authenticated customer dining reviews
+                      Based on {reviewsAI?.totalReviews ?? (Array.isArray(feedbackList) ? feedbackList.length : 0)} authenticated customer dining reviews
                     </p>
                   </div>
                 </div>
@@ -2691,7 +2691,7 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
                   <span className="uppercase tracking-wider text-[11px]">AI Review Context & Operational Analysis</span>
                 </div>
                 <p className="text-xs text-stone-800 leading-relaxed font-medium">
-                  {reviewsAI?.executiveSummary || reviewsAI?.aiSummary || 'Diners consistently praise the food flavor and smooth contactless ordering experience. Minor feedback focuses on table water refill turnaround during peak dining hours.'}
+                  {reviewsAI?.executiveSummary || reviewsAI?.aiSummary || 'No customer reviews recorded yet. Customer ratings and feedback insights will appear automatically after guests submit reviews.'}
                 </p>
 
                 {/* Manager / Chef Action Points */}
@@ -2725,22 +2725,25 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {(Array.isArray(reviewsAI?.topPraises) ? reviewsAI.topPraises : (Array.isArray(reviewsAI?.praiseTags) ? reviewsAI.praiseTags : [
-                      { badge: '😋 Delicious Taste', topic: 'Food Taste & Flavors', count: 18, percent: 85 },
-                      { badge: '⚡ Fast Kitchen Pacing', topic: 'Speed & Service Promptness', count: 12, percent: 60 },
-                      { badge: '📱 Smooth QR Ordering', topic: 'Contactless QR Convenience', count: 9, percent: 45 },
-                      { badge: '🔥 Hot & Fresh', topic: 'Freshness & Serving Temperature', count: 7, percent: 35 }
-                    ])).map((pt, idx) => (
-                      <div
-                        key={idx}
-                        className="px-2.5 py-1.5 rounded-xl bg-white border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-2 shadow-2xs"
-                      >
-                        <span>{pt.badge || pt.tag || '✨ ' + pt.topic}</span>
-                        <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100/70 px-1.5 py-0.2 rounded-md">
-                          {pt.count || 1} mentions
-                        </span>
-                      </div>
-                    ))}
+                    {(() => {
+                      const praises = Array.isArray(reviewsAI?.topPraises)
+                        ? reviewsAI.topPraises
+                        : (Array.isArray(reviewsAI?.praiseTags) ? reviewsAI.praiseTags : []);
+                      if (praises.length === 0) {
+                        return <p className="text-xs text-emerald-700/80">No review highlights yet. Praises will appear once guests submit ratings.</p>;
+                      }
+                      return praises.map((pt, idx) => (
+                        <div
+                          key={idx}
+                          className="px-2.5 py-1.5 rounded-xl bg-white border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-2 shadow-2xs"
+                        >
+                          <span>{pt.badge || pt.tag || '✨ ' + pt.topic}</span>
+                          <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100/70 px-1.5 py-0.2 rounded-md">
+                            {pt.count || 1} mentions
+                          </span>
+                        </div>
+                      ));
+                    })()}
                   </div>
                 </div>
 
@@ -2757,27 +2760,32 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {(Array.isArray(reviewsAI?.commonProblems) ? reviewsAI.commonProblems : (Array.isArray(reviewsAI?.criticalNotices) ? reviewsAI.criticalNotices : [
-                      { badge: '⏳ Long Waiting Time', topic: 'Wait Times & Kitchen Delays', count: 2, severity: 'HIGH', advice: 'Streamline kitchen pass-through' },
-                      { badge: '💧 Delayed Water Refills', topic: 'Water & Drink Refill Response', count: 1, severity: 'MEDIUM', advice: 'Floor runner check-in' }
-                    ])).map((cn, idx) => (
-                      <div
-                        key={idx}
-                        className="px-2.5 py-1.5 rounded-xl bg-white border border-rose-200 text-rose-900 text-xs font-bold flex items-center gap-2 shadow-2xs"
-                      >
-                        <span>{cn.badge || cn.notice || '⚠️ ' + cn.topic}</span>
-                        <span className="text-[10px] text-rose-700 font-bold bg-rose-100/70 px-1.5 py-0.2 rounded-md">
-                          {cn.count || 1} issues
-                        </span>
-                        {cn.severity && (
-                          <span className={`text-[9px] px-1 py-0.2 rounded uppercase font-black ${
-                            cn.severity === 'HIGH' ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white'
-                          }`}>
-                            {cn.severity}
+                    {(() => {
+                      const problems = Array.isArray(reviewsAI?.commonProblems)
+                        ? reviewsAI.commonProblems
+                        : (Array.isArray(reviewsAI?.criticalNotices) ? reviewsAI.criticalNotices : []);
+                      if (problems.length === 0) {
+                        return <p className="text-xs text-rose-700/80">No negative issues reported.</p>;
+                      }
+                      return problems.map((cn, idx) => (
+                        <div
+                          key={idx}
+                          className="px-2.5 py-1.5 rounded-xl bg-white border border-rose-200 text-rose-900 text-xs font-bold flex items-center gap-2 shadow-2xs"
+                        >
+                          <span>{cn.badge || cn.notice || '⚠️ ' + cn.topic}</span>
+                          <span className="text-[10px] text-rose-700 font-bold bg-rose-100/70 px-1.5 py-0.2 rounded-md">
+                            {cn.count || 1} issues
                           </span>
-                        )}
-                      </div>
-                    ))}
+                          {cn.severity && (
+                            <span className={`text-[9px] px-1 py-0.2 rounded uppercase font-black ${
+                              cn.severity === 'HIGH' ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white'
+                            }`}>
+                              {cn.severity}
+                            </span>
+                          )}
+                        </div>
+                      ));
+                    })()}
                   </div>
                 </div>
               </div>

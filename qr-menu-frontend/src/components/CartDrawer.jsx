@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trash2, Plus, Minus, Tag, Users, CheckCircle2, AlertCircle, Sparkles, Lock, Unlock, Receipt, ChefHat, Smartphone, Volume2 } from 'lucide-react';
+import { X, Trash2, Plus, Minus, Users, CheckCircle2, AlertCircle, Sparkles, Lock, Unlock, Receipt, ChefHat, Smartphone, Volume2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { api } from '../api';
 import { unlockOrderAudio, playOrderConfirmationSound } from '../utils/sound';
@@ -30,11 +30,8 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
     clearCart,
     cookingNotes,
     setCookingNotes,
-    appliedCoupon,
-    setAppliedCoupon,
     subtotal,
     discountAmount,
-    taxAmount,
     grandTotal,
     dietaryStats,
     hasActiveSession,
@@ -51,11 +48,6 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
     if (customerPhone) setPhoneInput(customerPhone);
     if (consentGiven !== undefined) setConsentCheck(Boolean(consentGiven));
   }, [customerName, customerPhone, consentGiven]);
-  
-  // Coupon input
-  const [couponCode, setCouponCode] = useState('');
-  const [couponError, setCouponError] = useState('');
-  const [couponSuccess, setCouponSuccess] = useState('');
   
   // Bill split
   const [splitWays, setSplitWays] = useState(2);
@@ -156,34 +148,6 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
   };
 
   if (!isOpen) return null;
-
-  // Apply Coupon
-  const handleApplyCoupon = async (e) => {
-    e.preventDefault();
-    if (!couponCode.trim()) return;
-    setCouponError('');
-    setCouponSuccess('');
-
-    // If active order exists, call backend coupon endpoint
-    if (activeOrder?.id) {
-      try {
-        const res = await api.applyCoupon(activeOrder.id, couponCode.trim());
-        setAppliedCoupon(res.coupon || { code: couponCode, discount_percentage: 10 });
-        setCouponSuccess(`Coupon applied! Saved ₹${res.discount_amount || 0}`);
-        checkSession(tableId);
-      } catch (err) {
-        setCouponError(err.message || 'Invalid or expired coupon');
-      }
-    } else {
-      // Pre-order coupon calculation
-      if (couponCode.toUpperCase().includes('10')) {
-        setAppliedCoupon({ code: couponCode.toUpperCase(), discount_percentage: 10 });
-        setCouponSuccess('10% discount applied to your cart!');
-      } else {
-        setCouponError('Invalid coupon code. Try FESTIVE10 or DISCOUNT10');
-      }
-    }
-  };
 
   // Place Order or Add Items to existing tab
   const handlePlaceOrder = async () => {
@@ -477,10 +441,6 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                       </span>
                     </div>
                   )}
-                  <div className="flex justify-between text-stone-400">
-                    <span>GST (5%)</span>
-                    <span>₹{parseFloat(activeOrder?.taxAmount || activeOrder?.tax_amount || 0).toFixed(2)}</span>
-                  </div>
                   <div className="flex justify-between font-black text-white text-sm pt-1 border-t border-white/10">
                     <span>Current Active Bill</span>
                     <span className="text-emerald-400">
@@ -702,30 +662,6 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
               </div>
             )}
 
-            {/* Promo Coupon */}
-            <div>
-              <form onSubmit={handleApplyCoupon} className="flex gap-2">
-                <div className="relative flex-1">
-                  <Tag className="w-4 h-4 absolute left-3 top-2.5 text-stone-400" />
-                  <input
-                    type="text"
-                    placeholder="Enter Coupon (e.g. FESTIVE10)"
-                    value={couponCode}
-                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-white/15 bg-stone-900 text-white placeholder-stone-500 uppercase font-semibold focus:border-amber-400 outline-none"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-white text-xs font-bold rounded-xl transition border border-white/10"
-                >
-                  Apply
-                </button>
-              </form>
-              {couponError && <p className="text-[11px] text-rose-400 mt-1">{couponError}</p>}
-              {couponSuccess && <p className="text-[11px] text-emerald-400 mt-1 font-semibold">{couponSuccess}</p>}
-            </div>
-
             {/* Smart Bill Splitting Preview */}
             <div className="pt-2 border-t border-white/10">
               <div className="flex items-center justify-between mb-2">
@@ -780,12 +716,6 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                     ₹{parseFloat(activeOrder?.subtotal || 0).toFixed(2)}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span>5% GST Tax</span>
-                  <span className="font-semibold text-white">
-                    ₹{parseFloat(activeOrder?.taxAmount || activeOrder?.tax_amount || 0).toFixed(2)}
-                  </span>
-                </div>
                 <div className="flex justify-between text-base font-black text-white pt-2 border-t border-white/10 font-mono">
                   <span>Current Active Bill Total</span>
                   <span className="text-emerald-400">
@@ -823,10 +753,6 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                     <span>-₹{parseFloat(discountAmount || 0).toFixed(2)}</span>
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <span>GST Tax (5%)</span>
-                  <span className="font-semibold text-white font-mono">₹{parseFloat(taxAmount || 0).toFixed(2)}</span>
-                </div>
                 <div className="flex justify-between text-base font-black text-white pt-2 border-t border-white/10 font-mono">
                   <span>{hasActiveSession ? 'Combined Table Total' : 'Grand Total'}</span>
                   <span className="text-emerald-400">

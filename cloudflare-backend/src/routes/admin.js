@@ -874,7 +874,7 @@ admin.get('/analytics/overview', async (c) => {
     const [revRes, ordCountRes, fbRes, topItemsRes, recentOrdersRes] = await Promise.all([
       c.env.DB.prepare("SELECT COALESCE(SUM(total), 0) as revenue FROM orders WHERE restaurant_id = ? AND status = 'PAID'").bind(restaurantId).first(),
       c.env.DB.prepare("SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND status = 'PAID'").bind(restaurantId).first(),
-      c.env.DB.prepare("SELECT COALESCE(AVG(rating), 5.0) as avg_rating, COUNT(*) as review_count FROM order_feedback WHERE restaurant_id = ?").bind(restaurantId).first(),
+      c.env.DB.prepare("SELECT COALESCE(AVG(rating), 0) as avg_rating, COUNT(*) as review_count FROM order_feedback WHERE restaurant_id = ?").bind(restaurantId).first(),
       c.env.DB.prepare(`
         SELECT mi.name, mi.category, SUM(oi.quantity) as count, ROUND(SUM(oi.quantity * oi.price_at_order), 2) as total_revenue
         FROM order_items oi
@@ -896,8 +896,8 @@ admin.get('/analytics/overview', async (c) => {
     const totalRevenue = Number(revRes?.revenue || 0);
     const paidOrders = Number(ordCountRes?.count || 0);
     const averageOrderValue = paidOrders > 0 ? Math.round((totalRevenue / paidOrders) * 100) / 100 : 0;
-    const avgRating = Math.round(Number(fbRes?.avg_rating || 5.0) * 10) / 10;
     const reviewCount = Number(fbRes?.review_count || 0);
+    const avgRating = reviewCount > 0 ? Math.round(Number(fbRes?.avg_rating || 0) * 10) / 10 : 0;
 
     return c.json({
       totalRevenue,
@@ -1260,30 +1260,88 @@ admin.get('/analytics/reviews-ai', async (c) => {
       if (rat >= 4) goodCount++;
     }
 
-    const averageRating = totalReviews > 0 ? Math.round((sumRating / totalReviews) * 10) / 10 : 4.9;
-    const goodPercentage = totalReviews > 0 ? Math.round((goodCount / totalReviews) * 100) : 98;
+    const averageRating = totalReviews > 0 ? Math.round((sumRating / totalReviews) * 10) / 10 : 0;
+    const goodPercentage = totalReviews > 0 ? Math.round((goodCount / totalReviews) * 100) : 0;
+
+    if (totalReviews === 0) {
+      return c.json({
+        averageRating: 0,
+        goodPercentage: 0,
+        totalReviews: 0,
+        engine: 'Cloudflare Edge SLM Engine (Free Lifetime)',
+        executiveSummary: 'No customer reviews recorded yet. Customer ratings and feedback insights will appear automatically after guests submit reviews.',
+        managerActionItems: [],
+        topPraises: [],
+        commonProblems: [],
+        recentReviews: [],
+      });
+    }
+
+    // Aggregate actual review themes from real database reviews
+    const praiseBuckets = [
+      { badge: '😋 Delicious Taste', topic: 'Food Taste & Flavors', regex: /(taste|delicious|yummy|good|nice|love|best|awesome|great|flavor|flavour)/i, count: 0 },
+      { badge: '⚡ Fast Kitchen Pacing', topic: 'Speed & Service Promptness', regex: /(fast|quick|speed|prompt|timely|on time)/i, count: 0 },
+      { badge: '📱 Smooth QR Ordering', topic: 'Contactless QR Convenience', regex: /(qr|order|easy|smooth|app|menu)/i, count: 0 },
+      { badge: '🔥 Served Hot & Fresh', topic: 'Freshness & Serving Temperature', regex: /(hot|fresh|warm|crisp)/i, count: 0 },
+    ];
+    const problemBuckets = [
+      { badge: '⏳ Long Waiting Time', topic: 'Wait Times & Kitchen Delays', regex: /(wait|slow|delay|late|long time)/i, count: 0, severity: 'MEDIUM', advice: 'Monitor kitchen pass-through speed' },
+      { badge: '💧 Service Attention', topic: 'Water & Table Service Response', regex: /(water|service|staff|rude|clean|cold|stale)/i, count: 0, severity: 'LOW', advice: 'Follow up with floor staff' },
+    ];
+
+    let negativeCount = 0;
+    for (const r of reviews) {
+      const rating = Number(r.rating || 5);
+      const text = String(r.comments || '');
+      if (rating >= 4) {
+        let matched = false;
+        for (const b of praiseBuckets) {
+          if (b.regex.test(text)) {
+            b.count++;
+            matched = true;
+          }
+        }
+        if (!matched) {
+          praiseBuckets[0].count++;
+        }
+      } else {
+        negativeCount++;
+        for (const p of problemBuckets) {
+          if (p.regex.test(text)) {
+            p.count++;
+          }
+        }
+      }
+    }
+
+    const topPraises = praiseBuckets
+      .filter((b) => b.count > 0)
+      .map((b) => ({
+        badge: b.badge,
+        topic: b.topic,
+        count: b.count,
+        percent: Math.round((b.count / totalReviews) * 100),
+      }));
+
+    const commonProblems = problemBuckets
+      .filter((p) => p.count > 0)
+      .map((p) => ({
+        badge: p.badge,
+        topic: p.topic,
+        count: p.count,
+        severity: p.severity,
+        advice: p.advice,
+      }));
 
     return c.json({
       averageRating,
       goodPercentage,
       totalReviews,
       engine: 'Cloudflare Edge SLM Engine (Free Lifetime)',
-      executiveSummary: 'Diners consistently praise our authentic food flavors, rapid kitchen ticket pacing, and seamless contactless QR ordering experience.',
-      managerActionItems: [
-        'Maintain speed of service during 7:30 PM - 9:30 PM peak dinner hours',
-        'Verify core heat lamp temperature before server dispatch',
-        'Check floor water carafes periodically during meal service'
-      ],
-      topPraises: [
-        { badge: '😋 Delicious Taste', topic: 'Food Taste & Flavors', count: Math.max(18, goodCount), percent: 88 },
-        { badge: '⚡ Fast Kitchen Pacing', topic: 'Speed & Service Promptness', count: Math.max(12, Math.floor(goodCount * 0.7)), percent: 65 },
-        { badge: '📱 Smooth QR Ordering', topic: 'Contactless QR Convenience', count: Math.max(9, Math.floor(goodCount * 0.5)), percent: 45 },
-        { badge: '🔥 Served Hot & Fresh', topic: 'Freshness & Serving Temperature', count: Math.max(7, Math.floor(goodCount * 0.4)), percent: 35 }
-      ],
-      commonProblems: [
-        { badge: '⏳ Long Waiting Time', topic: 'Wait Times & Kitchen Delays', count: 1, severity: 'MEDIUM', advice: 'Streamline kitchen pass-through' },
-        { badge: '💧 Delayed Water Refills', topic: 'Water & Drink Refill Response', count: 1, severity: 'LOW', advice: 'Floor runner check-in' }
-      ],
+      executiveSummary: `${goodPercentage}% positive across ${totalReviews} verified guest review${totalReviews === 1 ? '' : 's'} (avg ${averageRating}/5.0).${negativeCount > 0 ? ` ${negativeCount} review(s) flagged items to follow up.` : ''}`,
+      managerActionItems: negativeCount > 0 ? ['Follow up on low-rated order feedback in Diner Reviews'] : [],
+      topPraises,
+      commonProblems,
       recentReviews: reviews.slice(0, 20),
     });
   } catch (err) {
@@ -1477,7 +1535,7 @@ admin.get('/reports/sales/csv', async (c) => {
         escapeCsv(r.customer_name || 'Walk-in Diner'),
         escapeCsv(r.customer_phone || 'N/A'),
         parseFloat(r.subtotal || r.total || 0).toFixed(2),
-        parseFloat(r.tax_percentage || 5.0).toFixed(2),
+        parseFloat(r.tax_percentage ?? 0).toFixed(2),
         parseFloat(r.tax_amount || 0).toFixed(2),
         parseFloat(r.total || 0).toFixed(2),
         escapeCsv(r.payment_method || 'CASH'),

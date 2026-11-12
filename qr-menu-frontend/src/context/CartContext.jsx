@@ -204,9 +204,9 @@ export function CartProvider({ children }) {
   }, [subtotal, appliedCoupon]);
 
   const taxableAmount = Math.max(0, subtotal - discountAmount);
-  const taxRate = 0.05; // 5% GST
-  const taxAmount = parseFloat((taxableAmount * taxRate).toFixed(2));
-  const grandTotal = parseFloat((taxableAmount + taxAmount).toFixed(2));
+  const taxRate = 0; // No GST applied; bill strictly reflects menu prices
+  const taxAmount = 0;
+  const grandTotal = parseFloat(taxableAmount.toFixed(2));
 
   // Dietary calculations for Veg vs Non-Veg in active cart
   const dietaryStats = useMemo(() => {
