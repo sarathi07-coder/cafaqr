@@ -228,30 +228,27 @@ admin.get('/upi', async (c) => {
   try {
     let row;
     if (restaurantId) {
-      row = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name, upi_passkey, upi_accounts FROM restaurants WHERE id = ?').bind(restaurantId).first();
+      row = await c.env.DB.prepare('SELECT id, name, address, phone, upi_id, upi_name, upi_enabled, upi_passkey, upi_accounts FROM restaurants WHERE id = ?').bind(restaurantId).first();
     } else {
-      row = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name, upi_passkey, upi_accounts FROM restaurants LIMIT 1').first();
+      row = await c.env.DB.prepare('SELECT id, name, address, phone, upi_id, upi_name, upi_enabled, upi_passkey, upi_accounts FROM restaurants LIMIT 1').first();
     }
 
-    const defaultAccounts = [
-      { id: 'acc_1', bank: 'State Bank of India (SBI)', upi_id: 'vallipriya1212-1@oksbi', upi_name: 'Royal Spice Bistro (SBI)', daily_limit: '₹1,00,000 / day', notes: 'Primary Account (GPay / PhonePe / Paytm)' },
-      { id: 'acc_2', bank: 'HDFC Bank', upi_id: 'royalspice.bistro@okhdfcbank', upi_name: 'Royal Spice Bistro (HDFC)', daily_limit: '₹2,00,000 / day', notes: 'Secondary Backup' },
-      { id: 'acc_3', bank: 'ICICI Bank', upi_id: 'royalspice@icici', upi_name: 'Royal Spice Bistro (ICICI)', daily_limit: '₹2,00,000 / day', notes: 'Weekend High-Volume Backup' }
-    ];
-
-    let accounts = defaultAccounts;
+    let accounts = [];
     if (row?.upi_accounts) {
       try {
         const parsed = JSON.parse(row.upi_accounts);
-        if (Array.isArray(parsed) && parsed.length > 0) accounts = parsed;
+        if (Array.isArray(parsed)) accounts = parsed;
       } catch {}
     }
 
     return c.json({
       restaurantId: row?.id,
-      restaurantName: row?.name || 'Royal Spice Bistro',
-      upiId: row?.upi_id || 'vallipriya1212-1@oksbi',
-      upiName: row?.upi_name || 'Royal Spice Bistro',
+      restaurantName: row?.name || 'KRISH Cafe & Restaurant',
+      restaurantAddress: row?.address || '',
+      restaurantPhone: row?.phone || '',
+      upiEnabled: Boolean(row?.upi_enabled),
+      upiId: row?.upi_id || '',
+      upiName: row?.upi_name || row?.name || 'KRISH Cafe & Restaurant',
       hasPasskey: Boolean(row?.upi_passkey),
       upiAccounts: accounts
     });
@@ -261,7 +258,177 @@ admin.get('/upi', async (c) => {
   }
 });
 
-// PUT /api/admin/upi (Switch Active Bank / VPA with Manager Passkey)
+// PUT /api/admin/upi/toggle (Enable or Disable UPI Payment Engine for Diners)
+admin.put('/upi/toggle', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { restaurantId, enabled } = body;
+
+    let rest = null;
+    if (restaurantId) {
+      rest = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name, upi_accounts FROM restaurants WHERE id = ?').bind(restaurantId).first();
+    } else {
+      rest = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name, upi_accounts FROM restaurants LIMIT 1').first();
+    }
+    if (!rest) return c.json({ error: 'Restaurant not found' }, 404);
+
+    let nextUpiId = (rest.upi_id || '').trim();
+    let nextUpiName = (rest.upi_name || rest.name || 'KRISH Cafe & Restaurant').trim();
+    let accounts = [];
+    try {
+      const parsed = JSON.parse(rest.upi_accounts || '[]');
+      if (Array.isArray(parsed)) accounts = parsed;
+    } catch {}
+
+    if (enabled) {
+      if (!nextUpiId && accounts.length > 0) {
+        nextUpiId = (accounts[0].upi_id || '').trim();
+        nextUpiName = (accounts[0].upi_name || nextUpiName).trim();
+      }
+      if (!nextUpiId) {
+        return c.json({ error: 'Please add at least one UPI ID before turning UPI payments ON.' }, 400);
+      }
+    }
+
+    await c.env.DB.prepare(
+      'UPDATE restaurants SET upi_enabled = ?, upi_id = ?, upi_name = ? WHERE id = ?'
+    ).bind(enabled ? 1 : 0, nextUpiId, nextUpiName, rest.id).run();
+
+    return c.json({
+      success: true,
+      upiEnabled: Boolean(enabled),
+      upiId: nextUpiId,
+      upiName: nextUpiName,
+      upiAccounts: accounts,
+      message: enabled ? 'Dynamic UPI payments enabled for diners.' : 'Dynamic UPI payments turned OFF for diners.',
+    });
+  } catch (err) {
+    console.error('Toggle UPI error:', err);
+    return c.json({ error: 'Database error' }, 500);
+  }
+});
+
+// POST /api/admin/upi/accounts (Manually Add a UPI ID)
+admin.post('/upi/accounts', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { restaurantId, label, upiId, upiName, setActive = true } = body;
+
+    const cleanUpiId = String(upiId || '').trim();
+    if (!cleanUpiId || !/^[^\s@]+@[^\s@]+$/.test(cleanUpiId)) {
+      return c.json({ error: 'Please enter a valid UPI ID (e.g. name@oksbi).' }, 400);
+    }
+
+    let rest = null;
+    if (restaurantId) {
+      rest = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name, upi_enabled, upi_accounts FROM restaurants WHERE id = ?').bind(restaurantId).first();
+    } else {
+      rest = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name, upi_enabled, upi_accounts FROM restaurants LIMIT 1').first();
+    }
+    if (!rest) return c.json({ error: 'Restaurant not found' }, 404);
+
+    let accounts = [];
+    try {
+      const parsed = JSON.parse(rest.upi_accounts || '[]');
+      if (Array.isArray(parsed)) accounts = parsed;
+    } catch {}
+
+    if (accounts.some((a) => String(a.upi_id || '').toLowerCase() === cleanUpiId.toLowerCase())) {
+      return c.json({ error: 'This UPI ID is already in your list.' }, 409);
+    }
+
+    const cleanLabel = String(label || 'UPI Account').trim();
+    const cleanName = String(upiName || rest.name || 'KRISH Cafe & Restaurant').trim();
+    const newAccount = {
+      id: `upi_${crypto.randomUUID().slice(0, 8)}`,
+      label: cleanLabel,
+      bank: cleanLabel,
+      upi_id: cleanUpiId,
+      upi_name: cleanName,
+      created_at: new Date().toISOString(),
+    };
+
+    accounts.push(newAccount);
+    const shouldActivate = Boolean(setActive) || !(rest.upi_id || '').trim();
+    const activeUpiId = shouldActivate ? cleanUpiId : (rest.upi_id || '').trim();
+    const activeUpiName = shouldActivate ? cleanName : (rest.upi_name || rest.name || '').trim();
+
+    await c.env.DB.prepare(
+      'UPDATE restaurants SET upi_accounts = ?, upi_id = ?, upi_name = ? WHERE id = ?'
+    ).bind(JSON.stringify(accounts), activeUpiId, activeUpiName, rest.id).run();
+
+    return c.json({
+      success: true,
+      account: newAccount,
+      upiAccounts: accounts,
+      upiId: activeUpiId,
+      upiName: activeUpiName,
+      upiEnabled: Boolean(rest.upi_enabled),
+      message: `Added UPI ID ${cleanUpiId}!`,
+    }, 201);
+  } catch (err) {
+    console.error('Add UPI account error:', err);
+    return c.json({ error: 'Database error' }, 500);
+  }
+});
+
+// DELETE /api/admin/upi/accounts/:accountId (Remove a saved UPI ID)
+admin.delete('/upi/accounts/:accountId', async (c) => {
+  const accountId = c.req.param('accountId');
+  const restaurantId = c.req.query('restaurantId');
+  try {
+    let rest = null;
+    if (restaurantId) {
+      rest = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name, upi_enabled, upi_accounts FROM restaurants WHERE id = ?').bind(restaurantId).first();
+    } else {
+      rest = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name, upi_enabled, upi_accounts FROM restaurants LIMIT 1').first();
+    }
+    if (!rest) return c.json({ error: 'Restaurant not found' }, 404);
+
+    let accounts = [];
+    try {
+      const parsed = JSON.parse(rest.upi_accounts || '[]');
+      if (Array.isArray(parsed)) accounts = parsed;
+    } catch {}
+
+    const removed = accounts.find((a) => a.id === accountId);
+    const remaining = accounts.filter((a) => a.id !== accountId);
+
+    let nextUpiId = (rest.upi_id || '').trim();
+    let nextUpiName = (rest.upi_name || rest.name || 'KRISH Cafe & Restaurant').trim();
+    let nextEnabled = Boolean(rest.upi_enabled);
+
+    if (removed && nextUpiId.toLowerCase() === String(removed.upi_id || '').toLowerCase()) {
+      if (remaining.length > 0) {
+        nextUpiId = remaining[0].upi_id || '';
+        nextUpiName = remaining[0].upi_name || rest.name || 'KRISH Cafe & Restaurant';
+      } else {
+        nextUpiId = '';
+        nextEnabled = false;
+      }
+    } else if (remaining.length === 0 && !nextUpiId) {
+      nextEnabled = false;
+    }
+
+    await c.env.DB.prepare(
+      'UPDATE restaurants SET upi_accounts = ?, upi_id = ?, upi_name = ?, upi_enabled = ? WHERE id = ?'
+    ).bind(JSON.stringify(remaining), nextUpiId, nextUpiName, nextEnabled ? 1 : 0, rest.id).run();
+
+    return c.json({
+      success: true,
+      upiAccounts: remaining,
+      upiId: nextUpiId,
+      upiName: nextUpiName,
+      upiEnabled: nextEnabled,
+      message: 'UPI ID removed.',
+    });
+  } catch (err) {
+    console.error('Delete UPI account error:', err);
+    return c.json({ error: 'Database error' }, 500);
+  }
+});
+
+// PUT /api/admin/upi (Switch Active UPI Account / VPA)
 admin.put('/upi', async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
@@ -270,22 +437,21 @@ admin.put('/upi', async (c) => {
     if (!upiId || !upiName) {
       return c.json({ error: 'upiId and upiName are required' }, 400);
     }
-    if (!passkey) {
-      return c.json({ error: 'Manager Passkey is required to change payment destination.' }, 400);
-    }
 
     let rest = null;
     if (restaurantId) {
-      rest = await c.env.DB.prepare('SELECT id, upi_passkey FROM restaurants WHERE id = ?').bind(restaurantId).first();
+      rest = await c.env.DB.prepare('SELECT id, upi_passkey, upi_enabled FROM restaurants WHERE id = ?').bind(restaurantId).first();
     } else {
-      rest = await c.env.DB.prepare('SELECT id, upi_passkey FROM restaurants LIMIT 1').first();
+      rest = await c.env.DB.prepare('SELECT id, upi_passkey, upi_enabled FROM restaurants LIMIT 1').first();
     }
 
     if (!rest) return c.json({ error: 'Restaurant not found' }, 404);
 
-    const currentPasskey = rest.upi_passkey || '1234';
-    if (passkey !== currentPasskey) {
-      return c.json({ error: 'Incorrect Passkey! Only authorized managers can update the UPI payment account.' }, 403);
+    if (passkey !== undefined && passkey !== null && String(passkey).trim() !== '') {
+      const currentPasskey = rest.upi_passkey || '1234';
+      if (passkey !== currentPasskey) {
+        return c.json({ error: 'Incorrect Passkey! Only authorized managers can update the UPI payment account.' }, 403);
+      }
     }
 
     await c.env.DB.prepare(
@@ -294,9 +460,10 @@ admin.put('/upi', async (c) => {
 
     return c.json({
       success: true,
-      message: 'UPI payment settings updated and synchronized!',
+      message: 'Active UPI payment account updated!',
       upiId: upiId.trim(),
       upiName: upiName.trim(),
+      upiEnabled: Boolean(rest.upi_enabled),
     });
   } catch (err) {
     console.error('Update UPI error:', err);

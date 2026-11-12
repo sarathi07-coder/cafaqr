@@ -51,11 +51,13 @@ export default function UpiPaymentModal({
   orderId,
   sessionToken,
   customerName = '',
-  upiId: propUpiId = '8760633322@oksbi',
+  upiEnabled: propUpiEnabled = true,
+  upiId: propUpiId = '',
   upiName: propUpiName = 'KRISH Cafe & Restaurant',
   onPaymentSuccess
 }) {
-  const [upiId, setUpiId] = useState(propUpiId || '8760633322@oksbi');
+  const [upiEnabled, setUpiEnabled] = useState(Boolean(propUpiEnabled));
+  const [upiId, setUpiId] = useState(propUpiId || '');
   const [upiName, setUpiName] = useState(propUpiName || 'KRISH Cafe & Restaurant');
   const [copied, setCopied] = useState(false);
   const [utrNumber, setUtrNumber] = useState('');
@@ -69,11 +71,12 @@ export default function UpiPaymentModal({
     if (isOpen) {
       api.getUpiInfo(tableId)
         .then((info) => {
-          if (info?.upiId) setUpiId(info.upiId);
+          setUpiEnabled(Boolean(info?.upiEnabled) && Boolean(info?.upiId));
+          setUpiId(info?.upiId || '');
           if (info?.upiName) setUpiName(info.upiName);
         })
         .catch((err) => {
-          console.warn('Could not fetch dynamic UPI info, using fallback:', err.message);
+          console.warn('Could not fetch dynamic UPI info:', err.message);
         });
     }
   }, [isOpen, tableId]);
@@ -226,6 +229,18 @@ export default function UpiPaymentModal({
               </h4>
               <p className="text-xs text-stone-600 max-w-xs mx-auto">
                 Thank you for dining at {upiName}. Your bill of ₹{payableAmount} has been marked paid.
+              </p>
+            </div>
+          ) : (!upiEnabled || !upiId) ? (
+            <div className="py-8 text-center space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+                <AlertCircle className="w-7 h-7" />
+              </div>
+              <h4 className="text-base font-bold text-stone-900 font-serif">
+                UPI Payment Currently Disabled
+              </h4>
+              <p className="text-xs text-stone-600 max-w-xs mx-auto">
+                Online UPI payments are turned off by the restaurant right now. Please settle your bill of ₹{payableAmount} via Cash or Card at the counter.
               </p>
             </div>
           ) : (

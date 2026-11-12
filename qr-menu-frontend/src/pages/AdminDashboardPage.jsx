@@ -46,9 +46,12 @@ import {
   Smartphone,
   Copy,
   Check,
+  Printer,
+  Power,
 } from 'lucide-react';
 import SafeQRCode from '../components/SafeQRCode';
 import KrishLogo from '../components/KrishLogo';
+import ThermalReceiptModal from '../components/ThermalReceiptModal';
 import { api } from '../api';
 import { socket } from '../socket';
 import { parseUtcTimestamp } from '../utils/time';
@@ -151,13 +154,24 @@ export default function AdminDashboardPage() {
   // UPI Management & Incoming Payments States
   const [incomingUpiPayments, setIncomingUpiPayments] = useState([]);
   const [upiConfig, setUpiConfig] = useState({
-    upiId: '8760633322@oksbi',
-    upiName: 'KRISH Cafe & Restaurant'
+    enabled: false,
+    upiId: '',
+    upiName: 'KRISH Cafe & Restaurant',
+    restaurantName: 'KRISH Cafe & Restaurant',
+    address: '',
+    phone: '',
   });
   const [upiAccounts, setUpiAccounts] = useState([]);
+  const [newUpiForm, setNewUpiForm] = useState({
+    label: '',
+    upiId: '',
+    upiName: 'KRISH Cafe & Restaurant',
+  });
   const [isSavingUpi, setIsSavingUpi] = useState(false);
+  const [isTogglingUpi, setIsTogglingUpi] = useState(false);
   const [upiCopied, setUpiCopied] = useState(false);
   const [testUpiAmount, setTestUpiAmount] = useState('150');
+  const [activeReceipt, setActiveReceipt] = useState(null);
 
   // Manager Security Passkey State
   const [isPasskeyModalOpen, setIsPasskeyModalOpen] = useState(false);
@@ -391,17 +405,17 @@ export default function AdminDashboardPage() {
       // Fetch verified UPI configuration
       try {
         const upiData = await api.getAdminUpi(rId, token);
-        if (upiData?.upiId) {
-          setUpiConfig({
-            upiId: upiData.upiId || '8760633322@oksbi',
-            upiName: upiData.upiName || 'KRISH Cafe & Restaurant'
-          });
-          if (Array.isArray(upiData.upiAccounts) && upiData.upiAccounts.length > 0) {
-            setUpiAccounts(upiData.upiAccounts);
-          }
-        }
+        setUpiConfig({
+          enabled: Boolean(upiData?.upiEnabled),
+          upiId: upiData?.upiId || '',
+          upiName: upiData?.upiName || upiData?.restaurantName || 'KRISH Cafe & Restaurant',
+          restaurantName: upiData?.restaurantName || 'KRISH Cafe & Restaurant',
+          address: upiData?.restaurantAddress || '',
+          phone: upiData?.restaurantPhone || '',
+        });
+        setUpiAccounts(Array.isArray(upiData?.upiAccounts) ? upiData.upiAccounts : []);
       } catch {
-        // fallback
+        // Keep current UPI state cleanly if transient error occurs
       }
     } catch (err) {
       console.error('Data load error:', err);
@@ -428,19 +442,96 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleInitiateCustomUpiSave = (e) => {
-    e.preventDefault();
-    setPendingUpiSwitch({ upiId: upiConfig.upiId, upiName: upiConfig.upiName, bank: 'Custom VPA' });
-    setPasskeyInput('');
-    setPasskeyError('');
-    setIsPasskeyModalOpen(true);
+  const handleToggleUpiEngine = async () => {
+    const nextEnabled = !upiConfig.enabled;
+    setIsTogglingUpi(true);
+    try {
+      const res = await api.toggleAdminUpi(restaurantId, token, nextEnabled);
+      setUpiConfig((prev) => ({
+        ...prev,
+        enabled: Boolean(res.upiEnabled),
+        upiId: res.upiId ?? prev.upiId,
+        upiName: res.upiName ?? prev.upiName,
+      }));
+      if (Array.isArray(res.upiAccounts)) setUpiAccounts(res.upiAccounts);
+      setToastMessage(
+        res.upiEnabled
+          ? '✅ Dynamic UPI Payments turned ON for customers!'
+          : '⏸️ Dynamic UPI Payments turned OFF for customers.'
+      );
+    } catch (err) {
+      alert(err.message || 'Failed to toggle UPI status');
+    } finally {
+      setIsTogglingUpi(false);
+    }
   };
 
-  const handleInitiatePresetSwitch = (account) => {
-    setPendingUpiSwitch({ upiId: account.upi_id, upiName: account.upi_name, bank: account.bank });
-    setPasskeyInput('');
-    setPasskeyError('');
-    setIsPasskeyModalOpen(true);
+  const handleAddManualUpi = async (e) => {
+    e.preventDefault();
+    if (!newUpiForm.upiId.trim()) return;
+    setIsSavingUpi(true);
+    try {
+      const res = await api.addAdminUpiAccount(restaurantId, token, {
+        label: newUpiForm.label.trim() || 'UPI Account',
+        upiId: newUpiForm.upiId.trim(),
+        upiName: newUpiForm.upiName.trim() || upiConfig.restaurantName || 'KRISH Cafe & Restaurant',
+        setActive: true,
+      });
+      setUpiAccounts(Array.isArray(res.upiAccounts) ? res.upiAccounts : []);
+      setUpiConfig((prev) => ({
+        ...prev,
+        enabled: Boolean(res.upiEnabled),
+        upiId: res.upiId || prev.upiId,
+        upiName: res.upiName || prev.upiName,
+      }));
+      setNewUpiForm((prev) => ({ ...prev, label: '', upiId: '' }));
+      setToastMessage(`✅ Added UPI ID ${res.account?.upi_id || newUpiForm.upiId}!`);
+    } catch (err) {
+      alert(err.message || 'Failed to add UPI ID');
+    } finally {
+      setIsSavingUpi(false);
+    }
+  };
+
+  const handleActivateSavedUpi = async (account) => {
+    setIsSavingUpi(true);
+    try {
+      const res = await api.updateAdminUpi(
+        restaurantId,
+        token,
+        account.upi_id,
+        account.upi_name || upiConfig.restaurantName || 'KRISH Cafe & Restaurant'
+      );
+      setUpiConfig((prev) => ({
+        ...prev,
+        upiId: res.upiId,
+        upiName: res.upiName,
+      }));
+      setToastMessage(`✅ Active UPI switched to ${account.label || account.bank || res.upiId}!`);
+    } catch (err) {
+      alert(err.message || 'Failed to switch UPI account');
+    } finally {
+      setIsSavingUpi(false);
+    }
+  };
+
+  const handleDeleteSavedUpi = async (accountId) => {
+    setIsSavingUpi(true);
+    try {
+      const res = await api.deleteAdminUpiAccount(restaurantId, token, accountId);
+      setUpiAccounts(Array.isArray(res.upiAccounts) ? res.upiAccounts : []);
+      setUpiConfig((prev) => ({
+        ...prev,
+        enabled: Boolean(res.upiEnabled),
+        upiId: res.upiId || '',
+        upiName: res.upiName || prev.restaurantName || 'KRISH Cafe & Restaurant',
+      }));
+      setToastMessage('🗑️ UPI ID removed.');
+    } catch (err) {
+      alert(err.message || 'Failed to remove UPI ID');
+    } finally {
+      setIsSavingUpi(false);
+    }
   };
 
   const handleConfirmPasskeySwitch = async (e) => {
@@ -462,7 +553,7 @@ export default function AdminDashboardPage() {
         passkeyInput.trim()
       );
       setToastMessage(`✅ Active UPI successfully switched to ${pendingUpiSwitch.bank || res.upiId}!`);
-      setUpiConfig({ upiId: res.upiId, upiName: res.upiName });
+      setUpiConfig((prev) => ({ ...prev, upiId: res.upiId, upiName: res.upiName }));
       setIsPasskeyModalOpen(false);
       setPasskeyInput('');
       setPendingUpiSwitch(null);
@@ -691,12 +782,66 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const buildReceiptSnapshot = ({
+    orderId,
+    receiptNumber,
+    tableNumber,
+    customerName,
+    guestsCount = 1,
+    items = [],
+    subtotal,
+    discountAmount = 0,
+    taxAmount,
+    total,
+    paymentMethod = 'CASH',
+    statusText = 'PAID',
+  }) => ({
+    restaurantName: upiConfig.restaurantName || 'KRISH CAFE AND RESTAURANT',
+    addressLine1: upiConfig.address ? upiConfig.address.split(',')[0] : 'NEAR RATHINAM CLG, EACHANARI',
+    addressLine2: upiConfig.address && upiConfig.address.includes(',')
+      ? upiConfig.address.split(',').slice(1).join(',').trim()
+      : 'COIMBATORE - 641021',
+    phone: upiConfig.phone || '8760633322',
+    orderId,
+    receiptNumber: receiptNumber || orderId,
+    tableNumber: tableNumber || '1',
+    customerName: customerName || 'Diner',
+    guestsCount,
+    items,
+    subtotal,
+    discountAmount,
+    taxAmount,
+    total,
+    paymentMethod,
+    statusText,
+    paidAt: new Date().toISOString(),
+  });
+
   // Settle bill (flat stream)
   const handleConfirmSettle = async () => {
     if (!settleOrderId) return;
+    const allOrders = (Array.isArray(ordersList) && ordersList.length > 0)
+      ? ordersList
+      : (Array.isArray(overview?.recent_orders) ? overview.recent_orders : []);
+    const matchedOrder = allOrders.find((o) => o.id === settleOrderId);
+
     try {
       await api.dismissAndSettleOrder(settleOrderId, settleMethod, token);
-      setToastMessage(`Order settled via ${settleMethod}! Table is now free.`);
+      if (matchedOrder) {
+        setActiveReceipt(buildReceiptSnapshot({
+          orderId: matchedOrder.id,
+          tableNumber: matchedOrder.table_number || '1',
+          customerName: matchedOrder.customer_name || 'Guest',
+          items: matchedOrder.items || [],
+          subtotal: matchedOrder.subtotal,
+          discountAmount: matchedOrder.discount_amount || 0,
+          taxAmount: matchedOrder.tax_amount,
+          total: matchedOrder.total || matchedOrder.total_amount || 0,
+          paymentMethod: settleMethod,
+          statusText: 'PAID',
+        }));
+      }
+      setToastMessage(`Session ended & settled via ${settleMethod}! Table is now free.`);
       setSettleOrderId(null);
       await loadAllData(restaurantId);
     } catch (err) {
@@ -707,9 +852,21 @@ export default function AdminDashboardPage() {
   // Settle single customer bill in table group
   const handleConfirmSettleCustomer = async () => {
     if (!settleCustomerTarget) return;
+    const snapshotTarget = settleCustomerTarget;
     try {
-      await api.dismissAndSettleOrder(settleCustomerTarget.orderId, settleMethod, token);
-      setToastMessage(`${settleCustomerTarget.customerName}'s bill settled via ${settleMethod}!`);
+      await api.dismissAndSettleOrder(snapshotTarget.orderId, settleMethod, token);
+      setActiveReceipt(buildReceiptSnapshot({
+        orderId: snapshotTarget.orderId,
+        tableNumber: snapshotTarget.tableNumber || '1',
+        customerName: snapshotTarget.customerName || 'Guest',
+        items: snapshotTarget.items || [],
+        subtotal: snapshotTarget.subtotal,
+        taxAmount: snapshotTarget.taxAmount,
+        total: snapshotTarget.total || 0,
+        paymentMethod: settleMethod,
+        statusText: 'PAID',
+      }));
+      setToastMessage(`${snapshotTarget.customerName}'s session ended via ${settleMethod}!`);
       setSettleCustomerTarget(null);
       await loadAllData(restaurantId);
     } catch (err) {
@@ -720,9 +877,40 @@ export default function AdminDashboardPage() {
   // Settle entire table combined bill
   const handleConfirmSettleEntireTable = async () => {
     if (!settleTableTarget) return;
+    const snapshotTable = settleTableTarget;
+    const sections = Array.isArray(snapshotTable.customerSections)
+      ? snapshotTable.customerSections
+      : (Array.isArray(snapshotTable.sections) ? snapshotTable.sections : []);
+    const mergedItems = [];
+    let combinedSubtotal = 0;
+    let combinedTax = 0;
+    const guestNames = [];
+
+    sections.forEach((sec) => {
+      if (sec.customerName && !guestNames.includes(sec.customerName)) {
+        guestNames.push(sec.customerName);
+      }
+      combinedSubtotal += Number(sec.subtotal || 0);
+      combinedTax += Number(sec.taxAmount || 0);
+      (sec.items || []).forEach((it) => mergedItems.push(it));
+    });
+
     try {
-      const res = await api.settleEntireTable(settleTableTarget.tableId, settleMethod);
-      setToastMessage(`Table #${settleTableTarget.tableNumber} completely settled via ${settleMethod}! (${res.settledOrdersCount} diner sessions)`);
+      const res = await api.settleEntireTable(snapshotTable.tableId, settleMethod);
+      setActiveReceipt(buildReceiptSnapshot({
+        orderId: sections[0]?.orderId || snapshotTable.tableId,
+        receiptNumber: `T${String(snapshotTable.tableNumber).padStart(2, '0')}-${Date.now().toString().slice(-4)}`,
+        tableNumber: snapshotTable.tableNumber,
+        customerName: guestNames.join(', ') || `Table ${snapshotTable.tableNumber}`,
+        guestsCount: snapshotTable.activeCustomersCount || sections.length || 1,
+        items: mergedItems,
+        subtotal: combinedSubtotal,
+        taxAmount: combinedTax,
+        total: snapshotTable.combinedBill || 0,
+        paymentMethod: settleMethod,
+        statusText: 'PAID',
+      }));
+      setToastMessage(`Table #${snapshotTable.tableNumber} session ended via ${settleMethod}! (${res.settledOrdersCount} diner sessions)`);
       setSettleTableTarget(null);
       await loadAllData(restaurantId);
     } catch (err) {
@@ -1428,8 +1616,8 @@ export default function AdminDashboardPage() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-4 self-end md:self-auto">
-                          <div className="text-right">
+                        <div className="flex flex-wrap items-center gap-2.5 self-end md:self-auto">
+                          <div className="text-right mr-1">
                             <span className="text-[10px] text-stone-400 uppercase font-bold tracking-wider block">
                               Combined Bill
                             </span>
@@ -1438,10 +1626,41 @@ export default function AdminDashboardPage() {
                             </span>
                           </div>
                           <button
+                            onClick={() => {
+                              const secs = Array.isArray(table?.customerSections) ? table.customerSections : (table?.sections || []);
+                              const items = [];
+                              let sub = 0;
+                              let tax = 0;
+                              const names = [];
+                              secs.forEach((s) => {
+                                if (s.customerName && !names.includes(s.customerName)) names.push(s.customerName);
+                                sub += Number(s.subtotal || 0);
+                                tax += Number(s.taxAmount || 0);
+                                (s.items || []).forEach((it) => items.push(it));
+                              });
+                              setActiveReceipt(buildReceiptSnapshot({
+                                orderId: secs[0]?.orderId || table.tableId,
+                                tableNumber: table.tableNumber,
+                                customerName: names.join(', ') || `Table ${table.tableNumber}`,
+                                guestsCount: table.activeCustomersCount || secs.length || 1,
+                                items,
+                                subtotal: sub,
+                                taxAmount: tax,
+                                total: table.combinedBill || 0,
+                                paymentMethod: 'PENDING / PREVIEW',
+                                statusText: 'UNPAID PREVIEW',
+                              }));
+                            }}
+                            className="px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 font-bold text-xs rounded-xl transition active:scale-95 cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Print Bill</span>
+                          </button>
+                          <button
                             onClick={() => setSettleTableTarget(table)}
                             className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition active:scale-95 cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
                           >
-                            <span>⚡ Settle Entire Table</span>
+                            <span>⚡ End Session &amp; Bill</span>
                           </button>
                         </div>
                       </div>
@@ -1506,8 +1725,8 @@ export default function AdminDashboardPage() {
                             </div>
 
                             {/* Section Settlement Action */}
-                            <div className="flex items-center justify-between md:justify-end gap-3 border-t md:border-0 pt-2 md:pt-0 border-stone-200">
-                              <div className="text-right">
+                            <div className="flex flex-wrap items-center justify-between md:justify-end gap-2.5 border-t md:border-0 pt-2 md:pt-0 border-stone-200">
+                              <div className="text-right mr-1">
                                 <span className="text-[10px] text-stone-500 block uppercase font-semibold">
                                   Subtotal
                                 </span>
@@ -1516,10 +1735,27 @@ export default function AdminDashboardPage() {
                                 </span>
                               </div>
                               <button
-                                onClick={() => setSettleCustomerTarget(sec)}
+                                onClick={() => setActiveReceipt(buildReceiptSnapshot({
+                                  orderId: sec.orderId,
+                                  tableNumber: table.tableNumber,
+                                  customerName: sec.customerName,
+                                  items: sec.items || [],
+                                  subtotal: sec.subtotal,
+                                  taxAmount: sec.taxAmount,
+                                  total: sec.total || 0,
+                                  paymentMethod: 'PENDING / PREVIEW',
+                                  statusText: 'UNPAID PREVIEW',
+                                }))}
+                                className="px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-300 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span>Print</span>
+                              </button>
+                              <button
+                                onClick={() => setSettleCustomerTarget({ ...sec, tableNumber: table.tableNumber })}
                                 className="px-3.5 py-2 bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs rounded-xl transition active:scale-95 cursor-pointer whitespace-nowrap shadow-xs"
                               >
-                                Settle {sec.customerName}'s Bill (₹{parseFloat(sec.total || 0).toFixed(2)})
+                                End Session &amp; Bill (₹{parseFloat(sec.total || 0).toFixed(2)})
                               </button>
                             </div>
                           </div>
@@ -1603,7 +1839,7 @@ export default function AdminDashboardPage() {
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-0 pt-3 md:pt-0 border-stone-200">
+                      <div className="flex flex-wrap items-center justify-between md:justify-end gap-3 border-t md:border-0 pt-3 md:pt-0 border-stone-200">
                         <div className="text-right">
                           <p className="text-base font-black text-stone-950">
                             ₹{parseFloat(order.total || order.total_amount || 0).toFixed(2)}
@@ -1613,12 +1849,31 @@ export default function AdminDashboardPage() {
                           </p>
                         </div>
 
+                        <button
+                          onClick={() => setActiveReceipt(buildReceiptSnapshot({
+                            orderId: order.id,
+                            tableNumber: order.table_number || '1',
+                            customerName: order.customer_name || 'Guest',
+                            items: order.items || [],
+                            subtotal: order.subtotal,
+                            discountAmount: order.discount_amount || 0,
+                            taxAmount: order.tax_amount,
+                            total: order.total || order.total_amount || 0,
+                            paymentMethod: order.payment_method || (order.status === 'PAID' ? 'CASH' : 'PREVIEW'),
+                            statusText: order.status === 'PAID' ? 'PAID' : 'UNPAID PREVIEW',
+                          }))}
+                          className="px-3 py-2.5 bg-white hover:bg-stone-100 text-stone-800 border border-stone-300 font-bold text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Print Bill</span>
+                        </button>
+
                         {order.status !== 'PAID' && (
                           <button
                             onClick={() => setSettleOrderId(order.id)}
                             className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer whitespace-nowrap"
                           >
-                            Settle & Free Table
+                            End Session &amp; Bill
                           </button>
                         )}
                       </div>
@@ -2339,60 +2594,76 @@ export default function AdminDashboardPage() {
             <div className="bg-linear-to-r from-stone-900 via-stone-850 to-stone-900 text-white rounded-3xl p-6 shadow-md border border-stone-800">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border ${
+                    upiConfig.enabled
+                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                      : 'bg-stone-800 text-stone-400 border-stone-700'
+                  }`}>
                     <Smartphone className="w-7 h-7" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-serif font-bold text-xl text-white">
                         Dynamic UPI Payment Engine
                       </h3>
                       <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2.5 py-0.5 rounded-full">
                         0% Commission
                       </span>
+                      <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                        upiConfig.enabled
+                          ? 'bg-emerald-500 text-stone-950 border-emerald-400'
+                          : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                      }`}>
+                        {upiConfig.enabled ? 'ON • Live for Diners' : 'OFF • Disabled'}
+                      </span>
                     </div>
                     <p className="text-xs text-stone-400 mt-1 max-w-xl">
-                      Generates exact-amount dynamic QR codes for each dining table. Payments route straight to your bank account with zero payment gateway transaction deductions.
+                      Manually add multiple UPI IDs and turn dynamic UPI payments ON or OFF anytime. When OFF, UPI Pay buttons are hidden for customers.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="bg-stone-800/80 rounded-2xl p-3 border border-stone-700 text-center min-w-[120px]">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={isTogglingUpi}
+                    onClick={handleToggleUpiEngine}
+                    className={`px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-wider border transition flex items-center gap-2 cursor-pointer active:scale-95 ${
+                      upiConfig.enabled
+                        ? 'bg-emerald-500 hover:bg-emerald-400 text-stone-950 border-emerald-400 shadow-lg shadow-emerald-500/20'
+                        : 'bg-stone-800 hover:bg-stone-700 text-stone-200 border-stone-600'
+                    }`}
+                  >
+                    <Power className="w-4 h-4" />
+                    <span>{isTogglingUpi ? 'Updating...' : (upiConfig.enabled ? 'UPI ON (Click to Turn OFF)' : 'UPI OFF (Click to Turn ON)')}</span>
+                  </button>
+                  <div className="bg-stone-800/80 rounded-2xl p-3 border border-stone-700 text-center min-w-[130px]">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400 block">
                       Active VPA
                     </span>
-                    <span className="text-xs font-mono font-bold text-amber-400 truncate block max-w-[150px]">
-                      {upiConfig.upiId}
-                    </span>
-                  </div>
-                  <div className="bg-stone-800/80 rounded-2xl p-3 border border-stone-700 text-center min-w-[100px]">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400 block">
-                      Gateway Fees
-                    </span>
-                    <span className="text-xs font-bold text-emerald-400 block">
-                      ₹0 (Free)
+                    <span className="text-xs font-mono font-bold text-amber-400 truncate block max-w-[160px]">
+                      {upiConfig.upiId || 'Not Set'}
                     </span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Two-Column: Settings & Live QR Simulator */}
+            {/* Two-Column: Manual Multi-UPI Manager & Live QR Simulator */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               
-              {/* Left: UPI Multi-Bank Switcher & Custom Configuration */}
+              {/* Left: Manual UPI IDs & ON/OFF Controls */}
               <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-6">
-                <div className="flex items-start justify-between">
+                <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
-                      Bank Limit Switcher
+                      Manual Multi-UPI List
                     </span>
                     <h4 className="font-serif font-bold text-lg text-stone-900 mt-1.5">
-                      Bank Accounts & Daily Limits
+                      Saved UPI IDs ({upiAccounts.length})
                     </h4>
                     <p className="text-xs text-stone-500">
-                      When your primary bank hits its daily transaction limit (e.g. ₹1 Lakh), switch to a backup account instantly.
+                      Add as many UPI IDs as you need, switch active accounts in one tap, or remove old ones.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -2418,75 +2689,102 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
-                {/* Preset Accounts List */}
+                {/* Saved UPI Accounts List (No hardcoded presets) */}
                 <div className="space-y-2.5">
-                  {(Array.isArray(upiAccounts) && upiAccounts.length > 0 ? upiAccounts : [
-                    { id: 'acc_1', bank: 'State Bank of India (SBI)', upi_id: '8760633322@oksbi', upi_name: 'KRISH Cafe & Restaurant (SBI)', daily_limit: '₹1,00,000 / day', notes: 'Primary Account (GPay / PhonePe / Paytm)' },
-                    { id: 'acc_2', bank: 'HDFC Bank', upi_id: 'krishcafe@okhdfcbank', upi_name: 'KRISH Cafe & Restaurant (HDFC)', daily_limit: '₹2,00,000 / day', notes: 'Secondary Backup (Switches when SBI daily limit hits)' },
-                    { id: 'acc_3', bank: 'ICICI Bank', upi_id: 'krishcafe@icici', upi_name: 'KRISH Cafe & Restaurant (ICICI)', daily_limit: '₹2,00,000 / day', notes: 'Weekend High-Volume Backup' }
-                  ]).map((acc) => {
-                    const isActive = (upiConfig.upiId || '').toLowerCase() === (acc.upi_id || '').toLowerCase();
-                    return (
-                      <div
-                        key={acc.id}
-                        className={`p-3.5 rounded-2xl border transition-all ${
-                          isActive
-                            ? 'bg-amber-50/60 border-amber-300 ring-2 ring-amber-400/30'
-                            : 'bg-stone-50/80 border-stone-200 hover:border-stone-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-xs text-stone-900">{acc.bank}</span>
-                              {isActive ? (
-                                <span className="bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1">
-                                  <Check className="w-2.5 h-2.5" />
-                                  Active Live
+                  {upiAccounts.length === 0 ? (
+                    <div className="p-5 rounded-2xl border-2 border-dashed border-stone-200 bg-stone-50 text-center space-y-1.5">
+                      <p className="text-xs font-bold text-stone-700">No UPI IDs Saved</p>
+                      <p className="text-[11px] text-stone-500">
+                        Use the form below to manually add one or more UPI IDs, then turn UPI ON above when needed.
+                      </p>
+                    </div>
+                  ) : (
+                    upiAccounts.map((acc) => {
+                      const isActive = Boolean(upiConfig.upiId) && (upiConfig.upiId || '').toLowerCase() === (acc.upi_id || '').toLowerCase();
+                      return (
+                        <div
+                          key={acc.id}
+                          className={`p-3.5 rounded-2xl border transition-all ${
+                            isActive
+                              ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-400/30'
+                              : 'bg-stone-50/80 border-stone-200 hover:border-stone-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-xs text-stone-900">
+                                  {acc.label || acc.bank || 'UPI Account'}
                                 </span>
-                              ) : (
-                                <span className="text-[10px] font-semibold text-stone-500 bg-stone-200/70 px-2 py-0.5 rounded-md">
-                                  {acc.daily_limit}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[11px] font-mono font-semibold text-stone-600 mt-0.5">
-                              {acc.upi_id}
-                            </p>
-                            {acc.notes && (
-                              <p className="text-[10px] text-stone-400 mt-0.5">
-                                {acc.notes}
+                                {isActive && (
+                                  <span className="bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <Check className="w-2.5 h-2.5" />
+                                    Active VPA
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] font-mono font-semibold text-stone-700 mt-0.5 truncate">
+                                {acc.upi_id}
                               </p>
-                            )}
-                          </div>
+                              <p className="text-[10px] text-stone-500 truncate">
+                                Payee: {acc.upi_name || upiConfig.restaurantName}
+                              </p>
+                            </div>
 
-                          {!isActive && (
-                            <button
-                              type="button"
-                              onClick={() => handleInitiatePresetSwitch(acc)}
-                              className="px-3 py-1.5 bg-stone-900 hover:bg-amber-600 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0"
-                            >
-                              <Lock className="w-3 h-3 text-amber-400" />
-                              <span>Switch</span>
-                            </button>
-                          )}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {!isActive && (
+                                <button
+                                  type="button"
+                                  disabled={isSavingUpi}
+                                  onClick={() => handleActivateSavedUpi(acc)}
+                                  className="px-3 py-1.5 bg-stone-900 hover:bg-amber-600 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer active:scale-95"
+                                >
+                                  Use Active
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                disabled={isSavingUpi}
+                                onClick={() => handleDeleteSavedUpi(acc.id)}
+                                title="Remove UPI ID"
+                                className="p-2 text-rose-600 hover:bg-rose-50 border border-stone-200 hover:border-rose-200 rounded-xl transition cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
 
+                {/* Add New Manual UPI ID Form */}
                 <div className="border-t border-stone-200 pt-5">
                   <div className="mb-3">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
-                      Custom VPA Configuration
+                      Add UPI ID Manually
                     </span>
                     <h5 className="font-bold text-xs text-stone-900 mt-0.5">
-                      Or Set a Custom Merchant UPI ID
+                      Add New Merchant UPI ID to Your List
                     </h5>
                   </div>
 
-                  <form onSubmit={handleInitiateCustomUpiSave} className="space-y-4">
+                  <form onSubmit={handleAddManualUpi} className="space-y-3.5">
+                    <div>
+                      <label className="text-xs font-bold text-stone-700 block mb-1">
+                        Label / Bank Name (e.g. Counter 1, GPay SBI, Owner Backup)
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newUpiForm.label}
+                        onChange={(e) => setNewUpiForm({ ...newUpiForm, label: e.target.value })}
+                        placeholder="e.g. GPay Counter / SBI"
+                        className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-bold text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                      />
+                    </div>
+
                     <div>
                       <label className="text-xs font-bold text-stone-700 block mb-1">
                         UPI ID / Virtual Payment Address (VPA)
@@ -2494,25 +2792,22 @@ export default function AdminDashboardPage() {
                       <input
                         type="text"
                         required
-                        value={upiConfig.upiId}
-                        onChange={(e) => setUpiConfig({ ...upiConfig, upiId: e.target.value.trim() })}
-                        placeholder="e.g. vallipriya1212-1@oksbi"
+                        value={newUpiForm.upiId}
+                        onChange={(e) => setNewUpiForm({ ...newUpiForm, upiId: e.target.value.trim() })}
+                        placeholder="e.g. name@oksbi or merchant@okicici"
                         className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-mono font-bold text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
                       />
-                      <p className="text-[11px] text-stone-400 mt-1">
-                        Must be a valid handle (e.g. <code>vallipriya1212-1@oksbi</code>, <code>merchant@okhdfcbank</code>).
-                      </p>
                     </div>
 
                     <div>
                       <label className="text-xs font-bold text-stone-700 block mb-1">
-                        Merchant Payee Name (Appears in Diner's UPI App)
+                        Merchant Payee Name (Appears in Customer's UPI App)
                       </label>
                       <input
                         type="text"
                         required
-                        value={upiConfig.upiName}
-                        onChange={(e) => setUpiConfig({ ...upiConfig, upiName: e.target.value })}
+                        value={newUpiForm.upiName}
+                        onChange={(e) => setNewUpiForm({ ...newUpiForm, upiName: e.target.value })}
                         placeholder="e.g. KRISH Cafe & Restaurant"
                         className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-bold text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
                       />
@@ -2523,8 +2818,8 @@ export default function AdminDashboardPage() {
                       disabled={isSavingUpi}
                       className="w-full py-3 bg-stone-900 hover:bg-stone-800 disabled:bg-stone-400 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-98"
                     >
-                      <Lock className="w-4 h-4 text-amber-400" />
-                      <span>Save with Manager Passkey</span>
+                      <Plus className="w-4 h-4 text-amber-400" />
+                      <span>{isSavingUpi ? 'Adding...' : 'Add UPI ID'}</span>
                     </button>
                   </form>
                 </div>
@@ -2537,93 +2832,111 @@ export default function AdminDashboardPage() {
                     Live Testing
                   </span>
                   <h4 className="font-serif font-bold text-lg text-stone-900 mt-1.5">
-                    Dynamic QR Code Preview & Simulator
+                    Dynamic QR Code Preview &amp; Simulator
                   </h4>
                   <p className="text-xs text-stone-500">
-                    Test the dynamic QR code generated for diners. Amount is auto-locked in the QR payload.
+                    Test the dynamic QR code generated for diners when UPI is ON.
                   </p>
                 </div>
 
-                {/* Amount Selector */}
-                <div>
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-stone-500 block mb-1.5">
-                    Test Simulation Amount (₹)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    {['100', '250', '500', '1250'].map((amt) => (
-                      <button
-                        key={amt}
-                        type="button"
-                        onClick={() => setTestUpiAmount(amt)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                          testUpiAmount === amt
-                            ? 'bg-amber-500 text-stone-950 font-black shadow-xs'
-                            : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
-                        }`}
-                      >
-                        ₹{amt}
-                      </button>
-                    ))}
-                    <input
-                      type="number"
-                      min="1"
-                      value={testUpiAmount}
-                      onChange={(e) => setTestUpiAmount(e.target.value)}
-                      className="w-24 px-2.5 py-1.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-mono font-bold text-stone-900 focus:outline-hidden"
-                      placeholder="Custom"
-                    />
+                {(!upiConfig.enabled || !upiConfig.upiId) ? (
+                  <div className="p-8 bg-stone-50 rounded-2xl border-2 border-dashed border-stone-200 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+                      <Power className="w-6 h-6" />
+                    </div>
+                    <h5 className="text-sm font-bold text-stone-900">
+                      {!upiConfig.upiId ? 'No Active UPI ID Set' : 'Dynamic UPI Payments are Turned OFF'}
+                    </h5>
+                    <p className="text-xs text-stone-500 max-w-xs mx-auto">
+                      {!upiConfig.upiId
+                        ? 'Add a manual UPI ID on the left and switch the UPI engine ON to preview and accept diner UPI payments.'
+                        : 'Customers currently do not see any UPI payment buttons on the digital menu. Click "UPI OFF (Click to Turn ON)" at the top when you want to accept UPI.'}
+                    </p>
                   </div>
-                </div>
-
-                {/* QR Display Frame */}
-                {(() => {
-                  const amtVal = parseFloat(testUpiAmount || 100).toFixed(2);
-                  const simUri = `upi://pay?pa=${encodeURIComponent(upiConfig.upiId)}&pn=${encodeURIComponent(upiConfig.upiName)}&am=${amtVal}&cu=INR&tn=Table%201%20Bill`;
-
-                  return (
-                    <div className="p-4 bg-stone-50 rounded-2xl border-2 border-dashed border-stone-200 text-center space-y-3">
-                      <div className="inline-block p-3 bg-white rounded-2xl shadow-sm border border-stone-200">
-                        <SafeQRCode
-                          value={simUri}
-                          size={180}
-                          level="M"
-                          className="mx-auto"
+                ) : (
+                  <>
+                    {/* Amount Selector */}
+                    <div>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-stone-500 block mb-1.5">
+                        Test Simulation Amount (₹)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {['100', '250', '500', '1250'].map((amt) => (
+                          <button
+                            key={amt}
+                            type="button"
+                            onClick={() => setTestUpiAmount(amt)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                              testUpiAmount === amt
+                                ? 'bg-amber-500 text-stone-950 font-black shadow-xs'
+                                : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                            }`}
+                          >
+                            ₹{amt}
+                          </button>
+                        ))}
+                        <input
+                          type="number"
+                          min="1"
+                          value={testUpiAmount}
+                          onChange={(e) => setTestUpiAmount(e.target.value)}
+                          className="w-24 px-2.5 py-1.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-mono font-bold text-stone-900 focus:outline-hidden"
+                          placeholder="Custom"
                         />
                       </div>
-
-                      <div className="text-xs font-bold text-stone-900">
-                        ₹{amtVal} &bull; {upiConfig.upiName}
-                      </div>
-
-                      <div className="flex items-center justify-center gap-2 text-stone-500 text-[11px] font-medium">
-                        <span>GPay</span> &bull; <span>PhonePe</span> &bull; <span>Paytm</span> &bull; <span>BHIM</span> &bull; <span>CRED</span>
-                      </div>
-
-                      <div className="bg-white p-2 rounded-xl border border-stone-200 flex items-center justify-between text-left">
-                        <div className="min-w-0 pr-2">
-                          <span className="text-[10px] text-stone-400 uppercase font-bold block">
-                            Generated Deep Link
-                          </span>
-                          <span className="text-[11px] font-mono text-stone-700 truncate block">
-                            {simUri}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(simUri);
-                            setUpiCopied(true);
-                            setTimeout(() => setUpiCopied(false), 2000);
-                          }}
-                          className="px-2.5 py-1 text-xs font-bold rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 shrink-0 cursor-pointer flex items-center gap-1"
-                        >
-                          {upiCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                          <span>{upiCopied ? 'Copied' : 'Copy'}</span>
-                        </button>
-                      </div>
                     </div>
-                  );
-                })()}
+
+                    {/* QR Display Frame */}
+                    {(() => {
+                      const amtVal = parseFloat(testUpiAmount || 100).toFixed(2);
+                      const simUri = `upi://pay?pa=${encodeURIComponent(upiConfig.upiId)}&pn=${encodeURIComponent(upiConfig.upiName)}&am=${amtVal}&cu=INR&tn=Table%201%20Bill`;
+
+                      return (
+                        <div className="p-4 bg-stone-50 rounded-2xl border-2 border-dashed border-stone-200 text-center space-y-3">
+                          <div className="inline-block p-3 bg-white rounded-2xl shadow-sm border border-stone-200">
+                            <SafeQRCode
+                              value={simUri}
+                              size={180}
+                              level="M"
+                              className="mx-auto"
+                            />
+                          </div>
+
+                          <div className="text-xs font-bold text-stone-900">
+                            ₹{amtVal} &bull; {upiConfig.upiName}
+                          </div>
+
+                          <div className="flex items-center justify-center gap-2 text-stone-500 text-[11px] font-medium">
+                            <span>GPay</span> &bull; <span>PhonePe</span> &bull; <span>Paytm</span> &bull; <span>BHIM</span> &bull; <span>CRED</span>
+                          </div>
+
+                          <div className="bg-white p-2 rounded-xl border border-stone-200 flex items-center justify-between text-left">
+                            <div className="min-w-0 pr-2">
+                              <span className="text-[10px] text-stone-400 uppercase font-bold block">
+                                Generated Deep Link
+                              </span>
+                              <span className="text-[11px] font-mono text-stone-700 truncate block">
+                                {simUri}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(simUri);
+                                setUpiCopied(true);
+                                setTimeout(() => setUpiCopied(false), 2000);
+                              }}
+                              className="px-2.5 py-1 text-xs font-bold rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 shrink-0 cursor-pointer flex items-center gap-1"
+                            >
+                              {upiCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                              <span>{upiCopied ? 'Copied' : 'Copy'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
               </div>
 
             </div>
@@ -2834,7 +3147,7 @@ export default function AdminDashboardPage() {
                 onClick={handleConfirmSettleCustomer}
                 className="flex-1 py-2 text-xs font-bold text-white bg-stone-900 hover:bg-stone-800 rounded-xl transition cursor-pointer shadow-sm"
               >
-                Settle Bill (₹{parseFloat(settleCustomerTarget.total || 0).toFixed(2)})
+                End Session &amp; Print Bill (₹{parseFloat(settleCustomerTarget.total || 0).toFixed(2)})
               </button>
             </div>
           </div>
@@ -2893,7 +3206,7 @@ export default function AdminDashboardPage() {
                 onClick={handleConfirmSettleEntireTable}
                 className="flex-1 py-2 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition cursor-pointer shadow-md"
               >
-                Settle All (₹{parseFloat(settleTableTarget.combinedBill || 0).toFixed(2)})
+                End Table &amp; Print Bill (₹{parseFloat(settleTableTarget.combinedBill || 0).toFixed(2)})
               </button>
             </div>
           </div>
@@ -2938,7 +3251,7 @@ export default function AdminDashboardPage() {
                 onClick={handleConfirmSettle}
                 className="flex-1 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition"
               >
-                Confirm Settlement
+                End Session &amp; Print Bill
               </button>
             </div>
           </div>
@@ -3519,6 +3832,12 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Printable Thermal Receipt Modal (Triggered on End Session / Print Bill) */}
+      <ThermalReceiptModal
+        receipt={activeReceipt}
+        onClose={() => setActiveReceipt(null)}
+      />
     </div>
   );
 }

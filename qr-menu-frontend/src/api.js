@@ -513,6 +513,48 @@ export const api = {
     return res.json();
   },
 
+  async toggleAdminUpi(restaurantId, token, enabled) {
+    const res = await fetch(`${API_BASE}/admin/upi/toggle`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ restaurantId, enabled })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to toggle UPI status');
+    return data;
+  },
+
+  async addAdminUpiAccount(restaurantId, token, { label, upiId, upiName, setActive = true }) {
+    const res = await fetch(`${API_BASE}/admin/upi/accounts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ restaurantId, label, upiId, upiName, setActive })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to add UPI ID');
+    return data;
+  },
+
+  async deleteAdminUpiAccount(restaurantId, token, accountId) {
+    const params = new URLSearchParams();
+    if (restaurantId) params.append('restaurantId', restaurantId);
+    const res = await fetch(`${API_BASE}/admin/upi/accounts/${encodeURIComponent(accountId)}?${params.toString()}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to remove UPI ID');
+    return data;
+  },
+
   async updateAdminUpi(restaurantId, token, upiId, upiName, passkey) {
     const res = await fetch(`${API_BASE}/admin/upi`, {
       method: 'PUT',

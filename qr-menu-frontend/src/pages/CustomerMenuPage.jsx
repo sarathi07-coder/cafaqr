@@ -137,11 +137,33 @@ export default function CustomerMenuPage() {
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [isUpiModalOpen, setIsUpiModalOpen] = useState(false);
   const [upiPaymentData, setUpiPaymentData] = useState({ amount: 0, orderId: null });
+  const [upiStatus, setUpiStatus] = useState({
+    enabled: false,
+    upiId: '',
+    upiName: 'KRISH Cafe & Restaurant',
+  });
   const [lastCompletedOrderId, setLastCompletedOrderId] = useState(() => {
     return localStorage.getItem('qr_last_order_id') || '';
   });
 
+  const refreshUpiStatus = React.useCallback(async (tId, rId) => {
+    try {
+      const info = await api.getUpiInfo(tId || tableId, rId || restaurantId);
+      setUpiStatus({
+        enabled: Boolean(info?.upiEnabled) && Boolean(info?.upiId),
+        upiId: info?.upiId || '',
+        upiName: info?.upiName || info?.restaurantName || 'KRISH Cafe & Restaurant',
+      });
+    } catch {
+      // Keep previous status cleanly if offline
+    }
+  }, [tableId, restaurantId]);
+
   const handleOpenUpiModal = (target) => {
+    if (!upiStatus.enabled || !upiStatus.upiId) {
+      setToastMessage('UPI payments are currently turned off. Please pay via Cash or Card.');
+      return;
+    }
     setUpiPaymentData({
       amount: target?.amount || parseFloat(activeOrder?.total || activeOrder?.total_amount || 0),
       orderId: target?.orderId || activeOrder?.id
@@ -222,6 +244,8 @@ export default function CustomerMenuPage() {
           const uniqueCats = Array.from(new Set(rawItems.map((it) => it.category).filter(Boolean)));
           setCategories(uniqueCats);
         }
+
+        await refreshUpiStatus(effectiveTableId, effectiveRestId);
       } catch (err) {
         console.error('Failed to initialize menu:', err);
       } finally {
@@ -231,6 +255,21 @@ export default function CustomerMenuPage() {
 
     init();
   }, [urlTableId, urlTableNumber]);
+
+  // Refresh dynamic UPI availability when drawer opens or periodically so Admin ON/OFF takes effect live
+  useEffect(() => {
+    if (isCartOpen) {
+      refreshUpiStatus(tableId, restaurantId);
+    }
+  }, [isCartOpen, tableId, restaurantId, refreshUpiStatus]);
+
+  useEffect(() => {
+    if (!restaurantId && !tableId) return;
+    const timer = setInterval(() => {
+      refreshUpiStatus(tableId, restaurantId);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [tableId, restaurantId, refreshUpiStatus]);
 
   // Real-time socket events for menu updates & order status changes
   useEffect(() => {
@@ -804,7 +843,7 @@ export default function CustomerMenuPage() {
       <ItemNotch
         onOpenCart={() => setIsCartOpen(true)}
         onOpenActiveBill={() => setIsCartOpen(true)}
-        onOpenUpiModal={handleOpenUpiModal}
+        onOpenUpiModal={upiStatus.enabled && upiStatus.upiId ? handleOpenUpiModal : null}
       />
 
       {/* Cart & Ordering Drawer */}
@@ -813,7 +852,7 @@ export default function CustomerMenuPage() {
           isOpen={isCartOpen}
           onClose={() => setIsCartOpen(false)}
           onOrderSuccess={(msg) => setToastMessage(msg)}
-          onOpenUpiModal={handleOpenUpiModal}
+          onOpenUpiModal={upiStatus.enabled && upiStatus.upiId ? handleOpenUpiModal : null}
         />
       </SafeModalBoundary>
 
@@ -828,8 +867,9 @@ export default function CustomerMenuPage() {
           orderId={upiPaymentData.orderId || activeOrder?.id}
           sessionToken={sessionToken || ''}
           customerName={customerName || ''}
-          upiId="8760633322@oksbi"
-          upiName="KRISH Cafe & Restaurant"
+          upiEnabled={upiStatus.enabled}
+          upiId={upiStatus.upiId}
+          upiName={upiStatus.upiName}
           onPaymentSuccess={handleUpiPaymentSuccess}
         />
       </SafeModalBoundary>

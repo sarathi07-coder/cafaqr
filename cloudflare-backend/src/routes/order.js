@@ -688,24 +688,29 @@ order.get('/upi-info', async (c) => {
   try {
     let restaurant = null;
     if (restaurantId) {
-      restaurant = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name FROM restaurants WHERE id = ?').bind(restaurantId).first();
+      restaurant = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name, upi_enabled FROM restaurants WHERE id = ?').bind(restaurantId).first();
     } else {
-      restaurant = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name FROM restaurants LIMIT 1').first();
+      restaurant = await c.env.DB.prepare('SELECT id, name, upi_id, upi_name, upi_enabled FROM restaurants LIMIT 1').first();
     }
 
     if (!restaurant) {
       return c.json({
-        upiId: 'vallipriya1212-1@oksbi',
-        upiName: 'Royal Spice Bistro',
-        restaurantName: 'Royal Spice Bistro',
+        upiEnabled: false,
+        upiId: '',
+        upiName: 'KRISH Cafe & Restaurant',
+        restaurantName: 'KRISH Cafe & Restaurant',
         tableNumber: tableNumber ? Number(tableNumber) : null,
       });
     }
 
+    const cleanUpiId = (restaurant.upi_id || '').trim();
+    const isEnabled = Boolean(restaurant.upi_enabled) && Boolean(cleanUpiId);
+
     return c.json({
-      upiId: restaurant.upi_id || 'vallipriya1212-1@oksbi',
-      upiName: restaurant.upi_name || 'Royal Spice Bistro',
-      restaurantName: restaurant.name || 'Royal Spice Bistro',
+      upiEnabled: isEnabled,
+      upiId: isEnabled ? cleanUpiId : '',
+      upiName: restaurant.upi_name || restaurant.name || 'KRISH Cafe & Restaurant',
+      restaurantName: restaurant.name || 'KRISH Cafe & Restaurant',
       tableNumber: tableNumber ? Number(tableNumber) : null,
       restaurantId: restaurant.id,
     });

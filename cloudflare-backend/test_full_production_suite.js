@@ -256,12 +256,63 @@ async function runMasterSuite() {
 
   // SECTION 7: Dynamic UPI Payment & Settlement
   console.log('\n--- SECTION 7: Dynamic UPI Payments & Reconciliation ---');
-  await testStep('Fetch Dynamic Table UPI Config (GET /order/upi-info)', async () => {
-    const res = await fetch(`${API_BASE}/order/upi-info?tableId=${defaultTable.id}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (!data.upiId) throw new Error('Missing upiId');
-    return `VPA: ${data.upiId} (${data.upiName})`;
+  await testStep('Dynamic UPI Manual Add + Toggle ON/OFF + Delete Lifecycle', async () => {
+    // 1. Add manual UPI ID
+    const addRes = await fetch(`${API_BASE}/admin/upi/accounts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        restaurantId,
+        label: 'E2E Test UPI',
+        upiId: 'e2etest@oksbi',
+        upiName: 'KRISH Cafe E2E',
+        setActive: true,
+      }),
+    });
+    if (!addRes.ok) throw new Error(`Add UPI HTTP ${addRes.status}`);
+    const addData = await addRes.json();
+    const createdAccountId = addData.account?.id;
+
+    try {
+      // 2. Toggle ON and verify public /order/upi-info returns upiEnabled: true
+      const onRes = await fetch(`${API_BASE}/admin/upi/toggle`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ restaurantId, enabled: true }),
+      });
+      if (!onRes.ok) throw new Error(`Toggle ON HTTP ${onRes.status}`);
+
+      const infoOnRes = await fetch(`${API_BASE}/order/upi-info?tableId=${defaultTable.id}`);
+      if (!infoOnRes.ok) throw new Error(`UPI info ON HTTP ${infoOnRes.status}`);
+      const infoOn = await infoOnRes.json();
+      if (!infoOn.upiEnabled || infoOn.upiId !== 'e2etest@oksbi') {
+        throw new Error(`Expected e2etest@oksbi enabled, got ${JSON.stringify(infoOn)}`);
+      }
+
+      // 3. Toggle OFF and verify public /order/upi-info hides UPI
+      const offRes = await fetch(`${API_BASE}/admin/upi/toggle`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ restaurantId, enabled: false }),
+      });
+      if (!offRes.ok) throw new Error(`Toggle OFF HTTP ${offRes.status}`);
+
+      const infoOffRes = await fetch(`${API_BASE}/order/upi-info?tableId=${defaultTable.id}`);
+      if (!infoOffRes.ok) throw new Error(`UPI info OFF HTTP ${infoOffRes.status}`);
+      const infoOff = await infoOffRes.json();
+      if (infoOff.upiEnabled || infoOff.upiId !== '') {
+        throw new Error(`Expected disabled empty UPI info, got ${JSON.stringify(infoOff)}`);
+      }
+
+      return 'Added -> Toggled ON (live) -> Toggled OFF (hidden) -> Cleaned';
+    } finally {
+      if (createdAccountId) {
+        await fetch(`${API_BASE}/admin/upi/accounts/${encodeURIComponent(createdAccountId)}?restaurantId=${encodeURIComponent(restaurantId)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${adminToken}` },
+        }).catch(() => {});
+      }
+    }
   });
 
   await testStep('Submit Diner UPI Payment UTR (POST /order/upi/notify)', async () => {
