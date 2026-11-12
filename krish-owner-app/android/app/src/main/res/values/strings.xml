@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KRISH Cafe &amp; Restaurant</string>
+    <string name="title_activity_main">KRISH Cafe &amp; Restaurant</string>
+    <string name="package_name">com.krishcafe.owner</string>
+    <string name="custom_url_scheme">com.krishcafe.owner</string>
+</resources>

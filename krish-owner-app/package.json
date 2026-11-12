@@ -1,0 +1,25 @@
+{
+  "name": "krish-owner-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KRISH Cafe & Restaurant - Owner Mobile Application (Android & iOS) for Admin & Kitchen Panels",
+  "scripts": {
+    "build:web": "cd ../qr-menu-frontend && VITE_API_URL=https://cafaqr-api.p7404467.workers.dev VITE_APP_MODE=owner npm run build && rm -rf ../krish-owner-app/www && cp -R dist ../krish-owner-app/www",
+    "sync": "npm run build:web && npx cap sync",
+    "android:apk": "npm run sync && cd android && JAVA_HOME=\"/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home\" ANDROID_HOME=\"$HOME/Library/Android/sdk\" ./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ../KRISH-Cafe-Owner.apk",
+    "ios:open": "npm run sync && npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.4",
+    "@capacitor/app": "^7.1.0",
+    "@capacitor/core": "^7.4.4",
+    "@capacitor/ios": "^7.4.4",
+    "@capacitor/splash-screen": "^7.0.3",
+    "@capacitor/status-bar": "^7.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.4.4"
+  }
+}
+

@@ -4,7 +4,7 @@ import { Lock, User, ArrowRight, AlertCircle, ShieldCheck, Phone, MapPin, Eye, E
 import KrishLogo from '../components/KrishLogo';
 import { api } from '../api';
 
-export default function AdminLoginPage() {
+export default function AdminLoginPage({ embedded = false, onLoginSuccess }) {
   const navigate = useNavigate();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
@@ -28,7 +28,11 @@ export default function AdminLoginPage() {
     try {
       const res = await api.adminLogin(username, password);
       localStorage.setItem('qr_admin_token', res.token);
-      navigate('/admin');
+      if (onLoginSuccess) {
+        onLoginSuccess(res.token);
+      } else {
+        navigate('/admin');
+      }
     } catch (err) {
       setError(err.message || 'Invalid manager credentials');
     } finally {
@@ -71,7 +75,7 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0B0D] text-stone-100 flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans">
+    <div className={`${embedded ? 'min-h-[75vh] py-6 pb-24' : 'min-h-screen p-4'} bg-[#0B0B0D] text-stone-100 flex flex-col items-center justify-center px-4 relative overflow-hidden font-sans`}>
       {/* Background Ambience */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-br from-amber-500/10 via-orange-600/5 to-transparent rounded-full blur-3xl" />

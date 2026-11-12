@@ -102,7 +102,7 @@ class TabErrorBoundary extends React.Component {
   }
 }
 
-export default function AdminDashboardPage() {
+export default function AdminDashboardPage({ embedded = false, onLogout }) {
   const navigate = useNavigate();
   const token = localStorage.getItem('qr_admin_token');
 
@@ -359,18 +359,20 @@ export default function AdminDashboardPage() {
   // Check & verify admin session token on mount
   useEffect(() => {
     if (!token) {
-      navigate('/admin/login');
+      if (onLogout) onLogout();
+      else navigate('/admin/login');
       return;
     }
     let cancelled = false;
     api.verifyAdminSession(token, restaurantId).then((res) => {
       if (!cancelled && !res?.valid) {
         localStorage.removeItem('qr_admin_token');
-        navigate('/admin/login');
+        if (onLogout) onLogout();
+        else navigate('/admin/login');
       }
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [token, navigate, restaurantId]);
+  }, [token, navigate, restaurantId, onLogout]);
 
   const loadAllData = async (rId) => {
     if (!rId) return;
@@ -784,7 +786,11 @@ export default function AdminDashboardPage() {
 
   const handleLogout = () => {
     localStorage.removeItem('qr_admin_token');
-    navigate('/admin/login');
+    if (onLogout) {
+      onLogout();
+    } else {
+      navigate('/admin/login');
+    }
   };
 
   // Toggle item stock
@@ -1016,7 +1022,7 @@ export default function AdminDashboardPage() {
   const pendingCallsCount = (Array.isArray(serviceRequests) ? serviceRequests : []).filter((r) => r?.status === 'PENDING').length;
 
   return (
-    <div className="min-h-screen bg-stone-100 flex flex-col font-sans text-stone-900">
+    <div className={`${embedded ? 'min-h-0 pb-24' : 'min-h-screen'} bg-stone-100 flex flex-col font-sans text-stone-900`}>
       
       {/* Toast */}
       {toastMessage && (
@@ -1029,7 +1035,7 @@ export default function AdminDashboardPage() {
       )}
 
       {/* Admin Top Navigation */}
-      <header className="h-16 bg-[#120F0B]/95 backdrop-blur-xl border-b border-white/10 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-40">
+      <header className={`${embedded ? 'relative z-30' : 'sticky top-0 z-40'} h-16 bg-[#120F0B]/95 backdrop-blur-xl border-b border-white/10 px-4 sm:px-6 flex items-center justify-between`}>
         <div className="flex items-center gap-3">
           <KrishLogo size="sm" showMascot={true} showHat={true} showSubtitle={false} />
           <div className="hidden sm:block border-l border-white/15 pl-3">

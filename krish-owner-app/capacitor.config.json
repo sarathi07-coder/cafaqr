@@ -1,0 +1,28 @@
+{
+  "appId": "com.krishcafe.owner",
+  "appName": "KRISH Cafe & Restaurant",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#0B0B0D"
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#0B0B0D",
+    "allowsLinkPreview": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1400,
+      "launchAutoHide": true,
+      "backgroundColor": "#0B0B0D",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0B0B0D"
+    }
+  }
+}
+

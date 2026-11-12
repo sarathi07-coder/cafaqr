@@ -23,7 +23,7 @@ import { socket } from '../socket';
 import { parseUtcTimestamp } from '../utils/time';
 import { isParcelTable, formatTableLabel } from '../utils/tableDisplay';
 
-export default function KitchenPage() {
+export default function KitchenPage({ embedded = false }) {
   const [tickets, setTickets] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [restaurantId, setRestaurantId] = useState('');
@@ -440,7 +440,7 @@ export default function KitchenPage() {
 
   if (!isUnlocked) {
     return (
-      <div className="min-h-screen bg-[#0B0B0D] text-stone-100 flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans">
+      <div className={`${embedded ? 'min-h-[75vh] py-6 pb-24' : 'min-h-screen p-4'} bg-[#0B0B0D] text-stone-100 flex flex-col items-center justify-center px-4 relative overflow-hidden font-sans`}>
         <div className="fixed inset-0 pointer-events-none">
           <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-br from-amber-500/10 via-orange-600/5 to-transparent rounded-full blur-3xl" />
           <div className="absolute bottom-10 left-10 w-72 h-72 bg-emerald-500/5 rounded-full blur-2xl" />
@@ -643,7 +643,7 @@ export default function KitchenPage() {
   const readyTickets = ticketList.filter((t) => t.status === 'READY');
 
   return (
-    <div className="min-h-screen bg-[#0B0B0D] text-stone-100 flex flex-col font-sans select-none">
+    <div className={`${embedded ? 'min-h-[calc(100vh-4rem)] pb-24' : 'min-h-screen'} bg-[#0B0B0D] text-stone-100 flex flex-col font-sans select-none`}>
 
       {/* Floating Audio Alert Banner for New / Ready / Served */}
       {kitchenAlert && (
@@ -664,7 +664,7 @@ export default function KitchenPage() {
       )}
 
       {/* KDS Header Bar */}
-      <header className="h-16 px-4 sm:px-6 bg-[#120F0B]/95 backdrop-blur-xl border-b border-white/10 flex items-center justify-between shadow-xl sticky top-0 z-40">
+      <header className={`${embedded ? 'relative z-30' : 'sticky top-0 z-40'} h-16 px-4 sm:px-6 bg-[#120F0B]/95 backdrop-blur-xl border-b border-white/10 flex items-center justify-between shadow-xl`}>
         <div className="flex items-center gap-3">
           <KrishLogo size="sm" showHat={true} showSubtitle={false} />
           <div className="hidden sm:block border-l border-white/15 pl-3">

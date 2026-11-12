@@ -9,6 +9,9 @@ const KitchenPage = lazy(() => import('./pages/KitchenPage'));
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
 const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
 const BillViewPage = lazy(() => import('./pages/BillViewPage'));
+const OwnerAppPage = lazy(() => import('./pages/OwnerAppPage'));
+
+const IS_OWNER_MOBILE_APP = import.meta.env.VITE_APP_MODE === 'owner';
 
 // Minimal loading spinner shown while a page chunk downloads
 function PageLoader() {
@@ -29,14 +32,26 @@ export default function App() {
         <BrowserRouter>
           <Suspense fallback={<PageLoader />}>
             <Routes>
-              <Route path="/" element={<Navigate to="/order" replace />} />
-              <Route path="/order" element={<CustomerMenuPage />} />
-              <Route path="/kitchen" element={<KitchenPage />} />
-              <Route path="/admin" element={<AdminDashboardPage />} />
-              <Route path="/admin/login" element={<AdminLoginPage />} />
-              <Route path="/bill" element={<BillViewPage />} />
-              <Route path="/bill/:code" element={<BillViewPage />} />
-              <Route path="*" element={<Navigate to="/order" replace />} />
+              {IS_OWNER_MOBILE_APP ? (
+                <>
+                  <Route path="/" element={<OwnerAppPage />} />
+                  <Route path="/owner" element={<OwnerAppPage />} />
+                  <Route path="/bill/:code" element={<BillViewPage />} />
+                  <Route path="*" element={<OwnerAppPage />} />
+                </>
+              ) : (
+                <>
+                  <Route path="/" element={<Navigate to="/order" replace />} />
+                  <Route path="/order" element={<CustomerMenuPage />} />
+                  <Route path="/kitchen" element={<KitchenPage />} />
+                  <Route path="/admin" element={<AdminDashboardPage />} />
+                  <Route path="/admin/login" element={<AdminLoginPage />} />
+                  <Route path="/owner" element={<OwnerAppPage />} />
+                  <Route path="/bill" element={<BillViewPage />} />
+                  <Route path="/bill/:code" element={<BillViewPage />} />
+                  <Route path="*" element={<Navigate to="/order" replace />} />
+                </>
+              )}
             </Routes>
           </Suspense>
         </BrowserRouter>

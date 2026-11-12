@@ -40,5 +40,15 @@ backend.env
 .wrangler/
 */.wrangler/
 
+# Capacitor Mobile Build Artifacts
+krish-owner-app/www/
+krish-owner-app/*.apk
+krish-owner-app/android/app/build/
+krish-owner-app/android/build/
+krish-owner-app/android/.gradle/
+krish-owner-app/android/capacitor-cordova-android-plugins/build/
+krish-owner-app/android/local.properties
+krish-owner-app/ios/App/Pods/
+
 
 WhatsApp Image*
