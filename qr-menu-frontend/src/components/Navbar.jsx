@@ -1,6 +1,5 @@
 import React from 'react';
-import { BellRing, ChefHat, LayoutDashboard, Receipt, Phone, ShoppingBag } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { BellRing, Receipt, Phone, ShoppingBag } from 'lucide-react';
 import KrishLogo from './KrishLogo';
 
 export default function Navbar({
@@ -19,9 +18,9 @@ export default function Navbar({
       <div className="max-w-5xl mx-auto px-4 h-16 sm:h-18 flex items-center justify-between gap-3">
         {/* Brand Logo & Table Indicator */}
         <div className="flex items-center gap-3 min-w-0">
-          <Link to="/" className="shrink-0 flex items-center">
+          <div className="shrink-0 flex items-center">
             <KrishLogo size="sm" />
-          </Link>
+          </div>
 
           {tableNumber && (
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full krish-glass-gold border border-amber-400/30 text-xs font-bold text-amber-300 shrink-0">
@@ -78,22 +77,6 @@ export default function Navbar({
               <span className="hidden xs:inline">Call Staff</span>
             </button>
           )}
-
-          {/* Quick Staff Navigation */}
-          <Link
-            to="/kitchen"
-            title="Kitchen Display Screen (KDS)"
-            className="p-2 text-stone-400 hover:text-amber-300 hover:bg-white/10 rounded-xl transition cursor-pointer"
-          >
-            <ChefHat className="w-4 h-4" />
-          </Link>
-          <Link
-            to="/admin"
-            title="Owner & Cashier Command Center"
-            className="p-2 text-stone-400 hover:text-amber-300 hover:bg-white/10 rounded-xl transition cursor-pointer"
-          >
-            <LayoutDashboard className="w-4 h-4" />
-          </Link>
         </div>
       </div>
     </header>

@@ -376,6 +376,16 @@ async function runMasterSuite() {
 
   // SECTION 9: Admin Authentication & Dashboard
   console.log('\n--- SECTION 9: Admin Authentication & Management ---');
+  await testStep('Admin Login Rejects Invalid Password (POST /admin/login)', async () => {
+    const res = await fetch(`${API_BASE}/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'wrong-password-test' }),
+    });
+    if (res.status !== 401) throw new Error(`Expected HTTP 401, got ${res.status}`);
+    return 'Rejected invalid admin password (401)';
+  });
+
   await testStep('Admin Login (POST /admin/login)', async () => {
     const res = await fetch(`${API_BASE}/admin/login`, {
       method: 'POST',
@@ -387,6 +397,51 @@ async function runMasterSuite() {
     if (!data.token) throw new Error('Missing admin token');
     adminToken = data.token;
     return `JWT Token: ${adminToken.slice(0, 16)}...`;
+  });
+
+  await testStep('Admin Session Verify & Self-Reset Round-Trip (/admin/verify & /admin/reset-password)', async () => {
+    const verifyRes = await fetch(`${API_BASE}/admin/verify`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const verifyData = await verifyRes.json();
+    if (!verifyRes.ok || !verifyData.valid) {
+      throw new Error(`Expected valid token, got ${JSON.stringify(verifyData)}`);
+    }
+
+    const tempPassword = `tmpAdmin_${Date.now()}`;
+    try {
+      const resetRes = await fetch(`${API_BASE}/admin/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurantId, currentPassword: 'supersecret', newPassword: tempPassword }),
+      });
+      const resetData = await resetRes.json();
+      if (!resetRes.ok || !resetData.token) {
+        throw new Error(`Reset failed: ${JSON.stringify(resetData)}`);
+      }
+
+      const oldVerifyRes = await fetch(`${API_BASE}/admin/verify`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const oldVerifyData = await oldVerifyRes.json();
+      if (oldVerifyData.valid) throw new Error('Old admin token remained valid after password reset');
+
+      const loginNewRes = await fetch(`${API_BASE}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'admin', password: tempPassword }),
+      });
+      if (!loginNewRes.ok) throw new Error(`New password login failed: HTTP ${loginNewRes.status}`);
+      return 'Verified session, rotated password & invalidated stale token, restored cleanly';
+    } finally {
+      const restoreRes = await fetch(`${API_BASE}/admin/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurantId, recoveryPin: '2026', newPassword: 'supersecret' }),
+      });
+      const restoreData = await restoreRes.json().catch(() => ({}));
+      if (restoreData.token) adminToken = restoreData.token;
+    }
   });
 
   await testStep('Admin Bento Overview (GET /admin/analytics/overview)', async () => {

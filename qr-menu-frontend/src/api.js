@@ -569,6 +569,27 @@ export const api = {
     return data;
   },
 
+  async verifyAdminSession(token, restaurantId) {
+    const params = new URLSearchParams();
+    if (restaurantId) params.append('restaurantId', restaurantId);
+    const res = await fetch(`${API_BASE}/admin/verify?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return { valid: false };
+    return res.json();
+  },
+
+  async resetAdminPassword({ restaurantId, currentPassword, recoveryPin, newPassword }) {
+    const res = await fetch(`${API_BASE}/admin/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId, currentPassword, recoveryPin, newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to reset admin password');
+    return data;
+  },
+
   async getReceiptByCode(code) {
     const clean = encodeURIComponent(String(code || '').trim());
     const res = await fetch(`${API_BASE}/order/receipt/${clean}`);

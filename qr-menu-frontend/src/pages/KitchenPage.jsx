@@ -9,7 +9,6 @@ import {
   Volume2,
   VolumeX,
   RefreshCw,
-  ArrowLeft,
   Lock,
   Unlock,
   KeyRound,
@@ -18,7 +17,6 @@ import {
   Bell,
   X,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import KrishLogo from '../components/KrishLogo';
 import { api } from '../api';
 import { socket } from '../socket';
@@ -495,7 +493,7 @@ export default function KitchenPage() {
                     </button>
                   </div>
                   <p className="text-[10px] text-stone-500 mt-1.5">
-                    Default password: <span className="font-mono text-amber-300">kitchen123</span>
+                    Kitchen staff password required to access KDS
                   </p>
                 </div>
 
@@ -508,7 +506,7 @@ export default function KitchenPage() {
                   <span>{isLoggingIn ? 'Unlocking Kitchen...' : 'Unlock Kitchen KDS'}</span>
                 </button>
 
-                <div className="pt-2 flex items-center justify-between text-xs">
+                <div className="pt-2 flex items-center justify-center text-xs">
                   <button
                     type="button"
                     onClick={() => {
@@ -520,9 +518,6 @@ export default function KitchenPage() {
                     <KeyRound className="w-3.5 h-3.5" />
                     <span>Forgot / Reset Kitchen Password</span>
                   </button>
-                  <Link to="/admin" className="text-stone-400 hover:text-stone-200 font-semibold">
-                    Manager Portal →
-                  </Link>
                 </div>
               </form>
             ) : (
@@ -550,7 +545,7 @@ export default function KitchenPage() {
                       resetMode === 'admin' ? 'bg-amber-500 text-stone-950' : 'text-stone-400 hover:text-white'
                     }`}
                   >
-                    Manager Override
+                    Recovery PIN
                   </button>
                 </div>
 
@@ -569,14 +564,14 @@ export default function KitchenPage() {
                   <label className="block text-[11px] font-bold text-stone-400 mb-1">
                     {resetMode === 'current'
                       ? 'Current Kitchen Password'
-                      : 'Admin Password or Manager PIN'}
+                      : 'Kitchen Recovery PIN'}
                   </label>
                   <input
                     type="password"
                     required
                     value={resetAuthInput}
                     onChange={(e) => setResetAuthInput(e.target.value)}
-                    placeholder={resetMode === 'current' ? 'e.g. kitchen123' : 'e.g. supersecret or 1234'}
+                    placeholder={resetMode === 'current' ? 'Enter current kitchen password' : 'Enter 4-digit recovery PIN'}
                     className="w-full px-3.5 py-2.5 bg-stone-900/90 border border-white/10 rounded-xl text-xs text-white outline-none focus:border-amber-400"
                   />
                 </div>
@@ -761,15 +756,6 @@ export default function KitchenPage() {
           >
             <RefreshCw className="w-4 h-4" />
           </button>
-
-          {/* Exit Link */}
-          <Link
-            to="/admin"
-            className="text-xs font-black px-3.5 py-2.5 bg-stone-900 hover:bg-stone-800 text-stone-200 rounded-xl border border-white/15 transition flex items-center gap-1.5"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Manager Portal</span>
-          </Link>
         </div>
       </header>
 
@@ -822,7 +808,7 @@ export default function KitchenPage() {
                     resetMode === 'admin' ? 'bg-amber-500 text-stone-950' : 'text-stone-400 hover:text-white'
                   }`}
                 >
-                  Manager Override
+                  Recovery PIN
                 </button>
               </div>
 
@@ -839,14 +825,14 @@ export default function KitchenPage() {
 
               <div>
                 <label className="block text-[11px] font-bold text-stone-300 mb-1">
-                  {resetMode === 'current' ? 'Current Kitchen Password' : 'Admin Master Password or PIN'}
+                  {resetMode === 'current' ? 'Current Kitchen Password' : 'Kitchen Recovery PIN'}
                 </label>
                 <input
                   type="password"
                   required
                   value={resetAuthInput}
                   onChange={(e) => setResetAuthInput(e.target.value)}
-                  placeholder={resetMode === 'current' ? 'Current password' : 'e.g. supersecret or 1234'}
+                  placeholder={resetMode === 'current' ? 'Current password' : 'Enter 4-digit recovery PIN'}
                   className="w-full px-3 py-2 bg-stone-900 border border-white/10 rounded-xl text-xs text-white outline-none focus:border-amber-400"
                 />
               </div>

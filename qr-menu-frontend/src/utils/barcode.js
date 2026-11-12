@@ -62,3 +62,4 @@ export function encodeCode128B(rawInput = 'KR-000000') {
     totalWidth: x + quietZone,
   };
 }
+

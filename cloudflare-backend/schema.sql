@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS restaurants (
     upi_enabled INTEGER DEFAULT 0,
     upi_passkey TEXT DEFAULT '1234',
     kitchen_password TEXT DEFAULT 'kitchen123',
+    admin_password TEXT DEFAULT 'supersecret',
     upi_accounts TEXT DEFAULT '[]',
     created_at TEXT DEFAULT (datetime('now'))
 );

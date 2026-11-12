@@ -9,24 +9,122 @@ function generateUUID() {
   return crypto.randomUUID();
 }
 
-// POST /api/admin/login (Admin Authentication)
+const DEFAULT_ADMIN_PASSWORD = 'supersecret';
+
+// Derive deterministic SHA-256 session token bound to active admin_password so resets invalidate old sessions
+async function computeAdminToken(secret, password) {
+  const data = new TextEncoder().encode(`${secret || 'cafaqr_admin'}:${password}`);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashHex = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `cf_admin_${hashHex.slice(0, 40)}`;
+}
+
+async function getAdminAuthRow(db, restaurantId) {
+  if (restaurantId) {
+    const byId = await db
+      .prepare('SELECT id, admin_password, upi_passkey FROM restaurants WHERE id = ?')
+      .bind(restaurantId)
+      .first();
+    if (byId) return byId;
+  }
+  return db
+    .prepare('SELECT id, admin_password, upi_passkey FROM restaurants LIMIT 1')
+    .first();
+}
+
+// POST /api/admin/login (Admin Authentication against persisted DB password)
 admin.post('/login', async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const inputUser = body.email || body.username || '';
-  const password = body.password || '';
-  const adminPass = c.env?.ADMIN_PASSWORD || 'supersecret';
+  const inputUser = String(body.email || body.username || '').trim();
+  const password = String(body.password || '');
 
   const isMatchUser = (!inputUser || inputUser === 'admin' || inputUser === 'manager' || inputUser === 'admin@example.com');
-  const isMatchPass = (password === adminPass || password === 'admin123' || password === 'supersecret');
-
-  if (!isMatchPass) {
+  if (!isMatchUser) {
     return c.json({ error: 'Invalid credentials' }, 401);
   }
 
-  return c.json({
-    token: 'cf_jwt_admin_token_' + Date.now(),
-    message: 'Login successful',
-  });
+  try {
+    const rest = await getAdminAuthRow(c.env.DB, body.restaurantId);
+    const activePass = (rest?.admin_password && rest.admin_password.trim()) || c.env?.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
+
+    if (!password || password !== activePass) {
+      return c.json({ error: 'Invalid credentials' }, 401);
+    }
+
+    const token = await computeAdminToken(c.env?.JWT_SECRET, activePass);
+    return c.json({
+      token,
+      restaurantId: rest?.id || null,
+      message: 'Login successful',
+    });
+  } catch (err) {
+    console.error('Admin login error:', err);
+    return c.json({ error: 'Database error' }, 500);
+  }
+});
+
+// GET /api/admin/verify (Validate active admin token against current admin_password)
+admin.get('/verify', async (c) => {
+  try {
+    const restaurantId = c.req.query('restaurantId');
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim() || c.req.query('token') || '';
+    if (!token) return c.json({ valid: false });
+
+    const rest = await getAdminAuthRow(c.env.DB, restaurantId);
+    const activePass = (rest?.admin_password && rest.admin_password.trim()) || c.env?.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
+    const expected = await computeAdminToken(c.env?.JWT_SECRET, activePass);
+    return c.json({ valid: token === expected });
+  } catch (err) {
+    console.error('Admin verify error:', err);
+    return c.json({ valid: false }, 500);
+  }
+});
+
+// POST /api/admin/reset-password (Reset Admin Password inside Admin section using Current Password or Recovery PIN)
+admin.post('/reset-password', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { restaurantId, currentPassword, recoveryPin, newPassword } = body;
+
+    const cleanNew = String(newPassword || '').trim();
+    if (cleanNew.length < 4) {
+      return c.json({ error: 'New admin password must be at least 4 characters.' }, 400);
+    }
+
+    const rest = await getAdminAuthRow(c.env.DB, restaurantId);
+    if (!rest) return c.json({ error: 'Restaurant not found' }, 404);
+
+    const activePass = (rest.admin_password && rest.admin_password.trim()) || c.env?.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
+    const activePin = (rest.upi_passkey && rest.upi_passkey.trim()) || '1234';
+    const envMasterPass = c.env?.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
+
+    const authByCurrent = Boolean(currentPassword && String(currentPassword) === activePass);
+    const authByRecovery = Boolean(
+      recoveryPin &&
+      (String(recoveryPin).trim() === activePin || String(recoveryPin) === envMasterPass)
+    );
+
+    if (!authByCurrent && !authByRecovery) {
+      return c.json({ error: 'Invalid current password or recovery PIN.' }, 401);
+    }
+
+    await c.env.DB.prepare('UPDATE restaurants SET admin_password = ? WHERE id = ?')
+      .bind(cleanNew, rest.id)
+      .run();
+
+    const newToken = await computeAdminToken(c.env?.JWT_SECRET, cleanNew);
+    return c.json({
+      success: true,
+      token: newToken,
+      message: 'Admin password updated successfully! Use this new password for future logins.',
+    });
+  } catch (err) {
+    console.error('Admin reset password error:', err);
+    return c.json({ error: 'Database error' }, 500);
+  }
 });
 
 // GET /api/admin/tables (List Dining Tables)
@@ -481,20 +579,23 @@ admin.post('/upi/reset-passkey', async (c) => {
       return c.json({ error: 'adminPassword and newPasskey are required' }, 400);
     }
 
-    const validAdminPass = c.env?.ADMIN_PASSWORD || 'supersecret';
-    if (adminPassword !== validAdminPass && adminPassword !== 'admin123' && adminPassword !== 'supersecret') {
-      return c.json({ error: 'Invalid admin master password. Passkey reset denied.' }, 401);
+    let rest = null;
+    if (restaurantId) {
+      rest = await c.env.DB.prepare('SELECT id, admin_password FROM restaurants WHERE id = ?').bind(restaurantId).first();
+    } else {
+      rest = await c.env.DB.prepare('SELECT id, admin_password FROM restaurants LIMIT 1').first();
+    }
+
+    const activeAdminPass = (rest?.admin_password && rest.admin_password.trim()) || c.env?.ADMIN_PASSWORD || 'supersecret';
+    if (adminPassword !== activeAdminPass) {
+      return c.json({ error: 'Invalid admin password. Passkey reset denied.' }, 401);
     }
 
     if (String(newPasskey).length < 4) {
       return c.json({ error: 'New passkey must be at least 4 digits.' }, 400);
     }
 
-    let restId = restaurantId;
-    if (!restId) {
-      const rest = await c.env.DB.prepare('SELECT id FROM restaurants LIMIT 1').first();
-      restId = rest?.id;
-    }
+    const restId = rest?.id || restaurantId;
 
     await c.env.DB.prepare('UPDATE restaurants SET upi_passkey = ? WHERE id = ?').bind(String(newPasskey).trim(), restId).run();
 

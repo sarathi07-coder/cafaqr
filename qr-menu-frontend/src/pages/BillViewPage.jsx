@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Receipt, Search, CheckCircle2, Printer, ArrowLeft, AlertCircle } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Receipt, Search, CheckCircle2, Printer, AlertCircle } from 'lucide-react';
 import { api } from '../api';
 import KrishLogo from '../components/KrishLogo';
 import { encodeCode128B } from '../utils/barcode';
@@ -228,16 +228,6 @@ export default function BillViewPage() {
             </p>
           </div>
         )}
-
-        <div className="text-center print:hidden">
-          <Link
-            to="/order"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-stone-400 hover:text-amber-300 transition"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Digital Menu</span>
-          </Link>
-        </div>
       </div>
     </div>
   );

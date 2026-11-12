@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp,
   ShoppingBag,
@@ -187,11 +187,12 @@ export default function AdminDashboardPage() {
   const [resetNewPin, setResetNewPin] = useState('');
   const [resetStatus, setResetStatus] = useState({ error: '', success: '', loading: false });
 
-  // Reset Kitchen Password State
-  const [isResetKitchenPassOpen, setIsResetKitchenPassOpen] = useState(false);
-  const [kitchenResetAdminPass, setKitchenResetAdminPass] = useState('');
-  const [kitchenResetNewPass, setKitchenResetNewPass] = useState('');
-  const [kitchenResetStatus, setKitchenResetStatus] = useState({ error: '', success: '', loading: false });
+  // Reset Admin Password State (self-contained in Admin section)
+  const [isResetAdminPassOpen, setIsResetAdminPassOpen] = useState(false);
+  const [adminResetCurrentPass, setAdminResetCurrentPass] = useState('');
+  const [adminResetNewPass, setAdminResetNewPass] = useState('');
+  const [adminResetConfirmPass, setAdminResetConfirmPass] = useState('');
+  const [adminResetStatus, setAdminResetStatus] = useState({ error: '', success: '', loading: false });
 
   const segregatedReviews = React.useMemo(() => {
     const list = Array.isArray(feedbackList) ? feedbackList : [];
@@ -347,12 +348,21 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Check auth
+  // Check & verify admin session token on mount
   useEffect(() => {
     if (!token) {
       navigate('/admin/login');
+      return;
     }
-  }, [token, navigate]);
+    let cancelled = false;
+    api.verifyAdminSession(token, restaurantId).then((res) => {
+      if (!cancelled && !res?.valid) {
+        localStorage.removeItem('qr_admin_token');
+        navigate('/admin/login');
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [token, navigate, restaurantId]);
 
   const loadAllData = async (rId) => {
     if (!rId) return;
@@ -585,31 +595,44 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleExecuteResetKitchenPassword = async (e) => {
+  const handleExecuteResetAdminPassword = async (e) => {
     e.preventDefault();
-    setKitchenResetStatus({ error: '', success: '', loading: true });
+    if (adminResetNewPass.trim().length < 4) {
+      setAdminResetStatus({ error: 'New admin password must be at least 4 characters.', success: '', loading: false });
+      return;
+    }
+    if (adminResetNewPass !== adminResetConfirmPass) {
+      setAdminResetStatus({ error: 'New passwords do not match.', success: '', loading: false });
+      return;
+    }
+
+    setAdminResetStatus({ error: '', success: '', loading: true });
 
     try {
-      const res = await api.resetKitchenPassword({
+      const res = await api.resetAdminPassword({
         restaurantId,
-        adminPassword: kitchenResetAdminPass,
-        newPassword: kitchenResetNewPass,
+        currentPassword: adminResetCurrentPass,
+        newPassword: adminResetNewPass.trim(),
       });
-      setKitchenResetStatus({
+      if (res?.token) {
+        localStorage.setItem('qr_admin_token', res.token);
+      }
+      setAdminResetStatus({
         error: '',
-        success: res.message || 'Kitchen password updated successfully!',
+        success: res.message || 'Admin password updated successfully!',
         loading: false,
       });
-      setToastMessage('🍳 Kitchen Password updated successfully!');
+      setToastMessage('🔐 Admin Password updated successfully!');
       setTimeout(() => {
-        setIsResetKitchenPassOpen(false);
-        setKitchenResetAdminPass('');
-        setKitchenResetNewPass('');
-        setKitchenResetStatus({ error: '', success: '', loading: false });
+        setIsResetAdminPassOpen(false);
+        setAdminResetCurrentPass('');
+        setAdminResetNewPass('');
+        setAdminResetConfirmPass('');
+        setAdminResetStatus({ error: '', success: '', loading: false });
       }, 1500);
     } catch (err) {
-      setKitchenResetStatus({
-        error: err.message || 'Failed to reset kitchen password',
+      setAdminResetStatus({
+        error: err.message || 'Failed to reset admin password',
         success: '',
         loading: false,
       });
@@ -1015,13 +1038,18 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <Link
-            to="/kitchen"
-            className="px-3 py-1.5 rounded-xl text-xs font-black krish-gradient-gold text-stone-950 transition flex items-center gap-1.5 shadow-md active:scale-95"
+          <button
+            type="button"
+            onClick={() => {
+              setAdminResetStatus({ error: '', success: '', loading: false });
+              setIsResetAdminPassOpen(true);
+            }}
+            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-stone-900 hover:bg-stone-800 text-amber-300 transition flex items-center gap-1.5 border border-white/10 cursor-pointer"
+            title="Reset Admin Password"
           >
-            <ChefHat className="w-4 h-4" />
-            <span className="hidden sm:inline">Launch KDS</span>
-          </Link>
+            <Lock className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Reset Admin Pass</span>
+          </button>
 
           <a
             href={api.getSalesCSVUrl(restaurantId)}
@@ -2732,17 +2760,6 @@ export default function AdminDashboardPage() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setKitchenResetStatus({ error: '', success: '', loading: false });
-                        setIsResetKitchenPassOpen(true);
-                      }}
-                      className="text-[11px] font-bold text-stone-600 hover:text-amber-800 bg-stone-100 hover:bg-stone-200 border border-stone-300 px-2.5 py-1 rounded-xl transition flex items-center gap-1 cursor-pointer"
-                    >
-                      <Lock className="w-3 h-3 text-amber-600" />
-                      <span>Reset Kitchen Pass</span>
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => setIsResetPasskeyOpen(true)}
                       className="text-[11px] font-bold text-stone-600 hover:text-amber-800 bg-stone-100 hover:bg-stone-200 border border-stone-300 px-2.5 py-1 rounded-xl transition flex items-center gap-1 cursor-pointer"
                     >
@@ -3812,7 +3829,7 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {isResetKitchenPassOpen && (
+      {isResetAdminPassOpen && (
         <div className="fixed inset-0 z-50 bg-stone-950/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white border border-stone-200 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-stone-50">
@@ -3821,56 +3838,71 @@ export default function AdminDashboardPage() {
                   <Lock className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-stone-900">Reset Kitchen Password</h3>
-                  <p className="text-[11px] text-stone-500">Set a new password for `/kitchen` access</p>
+                  <h3 className="text-sm font-bold text-stone-900">Reset Admin Password</h3>
+                  <p className="text-[11px] text-stone-500">Change password for `/admin` portal access</p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsResetKitchenPassOpen(false)}
+                onClick={() => setIsResetAdminPassOpen(false)}
                 className="text-xs font-bold text-stone-400 hover:text-stone-700 px-2 py-1 rounded-lg cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleExecuteResetKitchenPassword} className="p-6 space-y-4">
-              {kitchenResetStatus.error && (
+            <form onSubmit={handleExecuteResetAdminPassword} className="p-6 space-y-4">
+              {adminResetStatus.error && (
                 <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-medium text-red-700">
-                  {kitchenResetStatus.error}
+                  {adminResetStatus.error}
                 </div>
               )}
-              {kitchenResetStatus.success && (
+              {adminResetStatus.success && (
                 <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-medium text-emerald-700">
-                  {kitchenResetStatus.success}
+                  {adminResetStatus.success}
                 </div>
               )}
 
               <div>
                 <label className="block text-xs font-bold text-stone-700 mb-1.5">
-                  Manager UPI Passkey PIN or Admin Master Password
+                  Current Admin Password
                 </label>
                 <input
                   type="password"
                   required
-                  value={kitchenResetAdminPass}
-                  onChange={(e) => setKitchenResetAdminPass(e.target.value)}
-                  placeholder="Enter Manager PIN or Admin Password"
+                  value={adminResetCurrentPass}
+                  onChange={(e) => setAdminResetCurrentPass(e.target.value)}
+                  placeholder="Enter current admin password"
                   className="w-full px-3.5 py-2.5 text-sm border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-stone-700 mb-1.5">
-                  New Kitchen Password
+                  New Admin Password
                 </label>
                 <input
                   type="password"
                   required
                   minLength={4}
-                  value={kitchenResetNewPass}
-                  onChange={(e) => setKitchenResetNewPass(e.target.value)}
+                  value={adminResetNewPass}
+                  onChange={(e) => setAdminResetNewPass(e.target.value)}
                   placeholder="Minimum 4 characters"
+                  className="w-full px-3.5 py-2.5 text-sm border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={4}
+                  value={adminResetConfirmPass}
+                  onChange={(e) => setAdminResetConfirmPass(e.target.value)}
+                  placeholder="Re-enter new admin password"
                   className="w-full px-3.5 py-2.5 text-sm border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
                 />
               </div>
@@ -3878,17 +3910,17 @@ export default function AdminDashboardPage() {
               <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsResetKitchenPassOpen(false)}
+                  onClick={() => setIsResetAdminPassOpen(false)}
                   className="px-4 py-2 text-xs font-bold text-stone-600 hover:bg-stone-100 rounded-xl transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={kitchenResetStatus.loading}
+                  disabled={adminResetStatus.loading}
                   className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-xl transition cursor-pointer"
                 >
-                  {kitchenResetStatus.loading ? 'Updating...' : 'Update Kitchen Password'}
+                  {adminResetStatus.loading ? 'Updating...' : 'Update Admin Password'}
                 </button>
               </div>
             </form>
