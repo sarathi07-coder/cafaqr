@@ -1,0 +1,73 @@
+name: Build KRISH Owner iOS App (.ipa)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ios-ipa:
+    name: Build Unsigned iOS IPA (Xcode)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend & Owner App dependencies
+        run: |
+          cd qr-menu-frontend && npm install --no-audit --no-fund
+          cd ../krish-owner-app && npm install --no-audit --no-fund
+
+      - name: Build Owner-Only Bundle & Generate Native iOS Project
+        run: |
+          cd krish-owner-app
+          npm run build:web
+          rm -rf ios
+          npx cap add ios
+          npx capacitor-assets generate --ios --iconBackgroundColor '#0B0B0D' --splashBackgroundColor '#0B0B0D'
+          npx cap sync ios
+
+      - name: Archive Unsigned iOS App via Xcode
+        run: |
+          cd krish-owner-app/ios/App
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/build/App.xcarchive" \
+            archive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package KRISH-Cafe-Owner-iOS.ipa
+        run: |
+          cd krish-owner-app/ios/App
+          mkdir -p build/Payload
+          cp -R build/App.xcarchive/Products/Applications/App.app build/Payload/
+          cd build
+          zip -r "../../../KRISH-Cafe-Owner-iOS.ipa" Payload
+
+      - name: Upload KRISH-Cafe-Owner-iOS.ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KRISH-Cafe-Owner-iOS
+          path: krish-owner-app/KRISH-Cafe-Owner-iOS.ipa
+
+      - name: Publish iOS IPA to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: owner-ios-latest
+          name: KRISH Cafe Owner App (iOS)
+          files: krish-owner-app/KRISH-Cafe-Owner-iOS.ipa
+          body: |
+            Unsigned iOS `.ipa` for **KRISH Cafe & Restaurant — Owner App** (Admin Panel + Kitchen Panel only).
+            - Install on iPhone using **Sideloadly**, **AltStore**, or **Xcode**, OR install directly via Safari **Add to Home Screen** at https://cafaqr.p7404467.workers.dev/owner.

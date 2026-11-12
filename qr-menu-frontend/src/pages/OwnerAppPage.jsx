@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, ChefHat, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, ChefHat, ShieldCheck, Share, X } from 'lucide-react';
 import AdminDashboardPage from './AdminDashboardPage';
 import AdminLoginPage from './AdminLoginPage';
 import KitchenPage from './KitchenPage';
@@ -7,6 +7,16 @@ import KitchenPage from './KitchenPage';
 export default function OwnerAppPage() {
   const [activePortal, setActivePortal] = useState('admin'); // 'admin' | 'kitchen'
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem('qr_admin_token') || '');
+  const [showIosInstallTip, setShowIosInstallTip] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const isIos = /iPhone|iPad|iPod/i.test(window.navigator.userAgent || '');
+    const isStandalone =
+      window.navigator.standalone === true ||
+      window.matchMedia?.('(display-mode: standalone)')?.matches ||
+      window.Capacitor?.isNativePlatform?.();
+    const dismissed = localStorage.getItem('krish_ios_tip_dismissed') === '1';
+    return isIos && !isStandalone && !dismissed;
+  });
 
   // Attach dedicated Owner PWA manifest + mobile app title
   useEffect(() => {
@@ -104,6 +114,29 @@ export default function OwnerAppPage() {
           </div>
         </div>
       </header>
+
+      {showIosInstallTip && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2.5 flex items-center justify-between gap-3 text-xs text-amber-100 print:hidden">
+          <div className="flex items-center gap-2 min-w-0">
+            <Share className="w-4 h-4 text-amber-300 shrink-0" />
+            <p className="truncate sm:whitespace-normal">
+              <span className="font-black text-amber-300">Install on iPhone:</span> Tap Safari{' '}
+              <span className="font-bold">Share</span> &rarr; <span className="font-bold">Add to Home Screen</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Dismiss iPhone install tip"
+            onClick={() => {
+              localStorage.setItem('krish_ios_tip_dismissed', '1');
+              setShowIosInstallTip(false);
+            }}
+            className="p-1 rounded-lg text-amber-200/80 hover:text-white hover:bg-white/10 shrink-0 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Active Owner Portal Content */}
       <main className="flex-1">
