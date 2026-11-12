@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Trash2, Plus, Minus, Tag, Users, CheckCircle2, AlertCircle, Sparkles, Lock, Unlock, Receipt, ChefHat, Smartphone } from 'lucide-react';
+import { X, Trash2, Plus, Minus, Tag, Users, CheckCircle2, AlertCircle, Sparkles, Lock, Unlock, Receipt, ChefHat, Smartphone, Volume2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { api } from '../api';
+import { unlockOrderAudio, playOrderConfirmationSound } from '../utils/sound';
 
 const triggerConfetti = async (opts) => {
   try {
@@ -11,70 +12,6 @@ const triggerConfetti = async (opts) => {
     console.warn('Confetti animation skipped', err);
   }
 };
-
-let sharedOrderAudioCtx = null;
-
-function getOrderAudioContext() {
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  if (!AudioCtx) return null;
-  if (!sharedOrderAudioCtx) {
-    sharedOrderAudioCtx = new AudioCtx();
-  }
-  return sharedOrderAudioCtx;
-}
-
-// Unlock AudioContext synchronously during the button tap so async order confirmation chimes work on mobile browsers
-function unlockOrderAudioContext() {
-  try {
-    const ctx = getOrderAudioContext();
-    if (ctx && ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-  } catch {
-    // Ignore audio errors
-  }
-}
-
-// Play pleasant confirmation chime once an order is confirmed sent to the kitchen
-function playOrderConfirmationSound(isAddOn = false) {
-  try {
-    const ctx = getOrderAudioContext();
-    if (!ctx) return;
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-
-    const now = ctx.currentTime;
-    const notes = isAddOn
-      ? [
-          { freq: 659.25, start: 0, duration: 0.18, gain: 0.2 }, // E5
-          { freq: 880.0, start: 0.11, duration: 0.22, gain: 0.22 }, // A5
-          { freq: 1046.5, start: 0.23, duration: 0.42, gain: 0.24 }, // C6
-        ]
-      : [
-          { freq: 523.25, start: 0, duration: 0.16, gain: 0.18 }, // C5
-          { freq: 659.25, start: 0.09, duration: 0.18, gain: 0.2 }, // E5
-          { freq: 783.99, start: 0.18, duration: 0.2, gain: 0.22 }, // G5
-          { freq: 1046.5, start: 0.28, duration: 0.5, gain: 0.24 }, // C6
-        ];
-
-    notes.forEach(({ freq, start, duration, gain: peak }) => {
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, now + start);
-      g.gain.setValueAtTime(0.001, now + start);
-      g.gain.exponentialRampToValueAtTime(peak, now + start + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
-      osc.connect(g);
-      g.connect(ctx.destination);
-      osc.start(now + start);
-      osc.stop(now + start + duration + 0.02);
-    });
-  } catch (err) {
-    console.warn('Order confirmation audio playback skipped:', err);
-  }
-}
 
 export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiModal }) {
   const {
@@ -263,7 +200,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
     }
 
     // Unlock audio within the user click gesture before async order request
-    unlockOrderAudioContext();
+    unlockOrderAudio();
 
     setIsSubmitting(true);
     try {
@@ -348,13 +285,23 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                 Table #{tableNumber || '1'} &bull; KRISH Cafe &amp; Restaurant
               </p>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 text-stone-400 hover:text-white hover:bg-white/10 rounded-full transition cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => playOrderConfirmationSound(hasActiveSession)}
+                className="p-2 text-amber-300/80 hover:text-amber-300 hover:bg-amber-500/10 rounded-full transition cursor-pointer"
+                title="Test Order Confirmation Sound"
+              >
+                <Volume2 className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-2 text-stone-400 hover:text-white hover:bg-white/10 rounded-full transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Body Content */}

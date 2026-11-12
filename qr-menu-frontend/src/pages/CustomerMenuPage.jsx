@@ -26,6 +26,7 @@ import KrishLogo from '../components/KrishLogo';
 import { useCart } from '../context/CartContext';
 import { api } from '../api';
 import { socket } from '../socket';
+import { unlockOrderAudio } from '../utils/sound';
 
 class SafeModalBoundary extends React.Component {
   constructor(props) {
@@ -153,6 +154,17 @@ export default function CustomerMenuPage() {
     checkSession(tableId);
     setTimeout(() => setIsFeedbackModalOpen(true), 1200);
   };
+
+  // Pre-unlock mobile/desktop browser audio on first tap or keystroke so async order chimes play reliably
+  useEffect(() => {
+    const handleUnlock = () => unlockOrderAudio();
+    window.addEventListener('pointerdown', handleUnlock, { once: true, passive: true });
+    window.addEventListener('keydown', handleUnlock, { once: true, passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', handleUnlock);
+      window.removeEventListener('keydown', handleUnlock);
+    };
+  }, []);
 
   // Track active order ID to preserve for post-payment review
   useEffect(() => {
