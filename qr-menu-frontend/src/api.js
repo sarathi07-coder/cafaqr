@@ -171,7 +171,8 @@ export const api = {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return { valid: false };
+    if (res.status === 401 || res.status === 403) return { valid: false };
+    if (!res.ok) throw new Error('Kitchen session verification unavailable');
     return res.json();
   },
 
@@ -570,12 +571,14 @@ export const api = {
   },
 
   async verifyAdminSession(token, restaurantId) {
+    if (!token) return { valid: false };
     const params = new URLSearchParams();
     if (restaurantId) params.append('restaurantId', restaurantId);
     const res = await fetch(`${API_BASE}/admin/verify?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return { valid: false };
+    if (res.status === 401 || res.status === 403) return { valid: false };
+    if (!res.ok) throw new Error('Admin session verification unavailable');
     return res.json();
   },
 

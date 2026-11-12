@@ -1,20 +1,9 @@
 // Kitchen Display System (KDS) Router for Cloudflare Workers & D1
 import { Hono } from 'hono';
 import { toUtcIso } from '../utils/time.js';
+import { DEFAULT_KITCHEN_PASSWORD, computeKitchenToken } from '../utils/auth.js';
 
 const kitchen = new Hono();
-
-const DEFAULT_KITCHEN_PASSWORD = 'kitchen123';
-
-// Derive deterministic SHA-256 session token bound to the current kitchen password so resets invalidate old sessions
-async function computeKitchenToken(secret, password) {
-  const data = new TextEncoder().encode(`${secret || 'cafaqr_kitchen'}:${password}`);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashHex = Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `cf_kitchen_${hashHex.slice(0, 40)}`;
-}
 
 async function getRestaurantKitchenConfig(db, restaurantId) {
   let row = null;

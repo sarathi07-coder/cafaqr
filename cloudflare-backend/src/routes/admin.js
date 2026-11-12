@@ -1,6 +1,12 @@
 // Admin Portal Router for Cloudflare Workers & D1
 import { Hono } from 'hono';
 import { toUtcIso } from '../utils/time.js';
+import {
+  DEFAULT_ADMIN_PASSWORD,
+  DEFAULT_KITCHEN_PASSWORD,
+  computeAdminToken,
+  computeKitchenToken,
+} from '../utils/auth.js';
 
 const admin = new Hono();
 
@@ -9,28 +15,16 @@ function generateUUID() {
   return crypto.randomUUID();
 }
 
-const DEFAULT_ADMIN_PASSWORD = 'supersecret';
-
-// Derive deterministic SHA-256 session token bound to active admin_password so resets invalidate old sessions
-async function computeAdminToken(secret, password) {
-  const data = new TextEncoder().encode(`${secret || 'cafaqr_admin'}:${password}`);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashHex = Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `cf_admin_${hashHex.slice(0, 40)}`;
-}
-
 async function getAdminAuthRow(db, restaurantId) {
   if (restaurantId) {
     const byId = await db
-      .prepare('SELECT id, admin_password, upi_passkey FROM restaurants WHERE id = ?')
+      .prepare('SELECT id, admin_password, kitchen_password, upi_passkey FROM restaurants WHERE id = ?')
       .bind(restaurantId)
       .first();
     if (byId) return byId;
   }
   return db
-    .prepare('SELECT id, admin_password, upi_passkey FROM restaurants LIMIT 1')
+    .prepare('SELECT id, admin_password, kitchen_password, upi_passkey FROM restaurants LIMIT 1')
     .first();
 }
 
@@ -54,8 +48,11 @@ admin.post('/login', async (c) => {
     }
 
     const token = await computeAdminToken(c.env?.JWT_SECRET, activePass);
+    const activeKitchenPass = (rest?.kitchen_password && rest.kitchen_password.trim()) || DEFAULT_KITCHEN_PASSWORD;
+    const kitchenToken = await computeKitchenToken(c.env?.JWT_SECRET, activeKitchenPass);
     return c.json({
       token,
+      kitchenToken,
       restaurantId: rest?.id || null,
       message: 'Login successful',
     });
@@ -76,7 +73,12 @@ admin.get('/verify', async (c) => {
     const rest = await getAdminAuthRow(c.env.DB, restaurantId);
     const activePass = (rest?.admin_password && rest.admin_password.trim()) || c.env?.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
     const expected = await computeAdminToken(c.env?.JWT_SECRET, activePass);
-    return c.json({ valid: token === expected });
+    if (token !== expected) {
+      return c.json({ valid: false });
+    }
+    const activeKitchenPass = (rest?.kitchen_password && rest.kitchen_password.trim()) || DEFAULT_KITCHEN_PASSWORD;
+    const kitchenToken = await computeKitchenToken(c.env?.JWT_SECRET, activeKitchenPass);
+    return c.json({ valid: true, kitchenToken });
   } catch (err) {
     console.error('Admin verify error:', err);
     return c.json({ valid: false }, 500);

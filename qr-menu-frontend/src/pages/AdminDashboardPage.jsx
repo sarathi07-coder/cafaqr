@@ -56,6 +56,12 @@ import { api } from '../api';
 import { socket } from '../socket';
 import { parseUtcTimestamp } from '../utils/time';
 import {
+  getSyncToken,
+  hydratePersistentAuth,
+  removePersistentToken,
+  setPersistentToken,
+} from '../utils/persistentAuth';
+import {
   isParcelTable,
   getOrdinalTableLabel,
   formatTableLabel,
@@ -104,7 +110,7 @@ class TabErrorBoundary extends React.Component {
 
 export default function AdminDashboardPage({ embedded = false, onLogout }) {
   const navigate = useNavigate();
-  const token = localStorage.getItem('qr_admin_token');
+  const [token, setToken] = useState(() => getSyncToken('qr_admin_token'));
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'orders' | 'service' | 'menu' | 'tables' | 'coupons' | 'reviews'
   const [restaurantId, setRestaurantId] = useState('');
@@ -356,21 +362,38 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
     }
   };
 
-  // Check & verify admin session token on mount
+  // Check & verify admin session token on mount (hydrating from permanent storage first)
   useEffect(() => {
-    if (!token) {
-      if (onLogout) onLogout();
-      else navigate('/admin/login');
-      return;
-    }
     let cancelled = false;
-    api.verifyAdminSession(token, restaurantId).then((res) => {
-      if (!cancelled && !res?.valid) {
-        localStorage.removeItem('qr_admin_token');
+    (async () => {
+      let activeToken = token || getSyncToken('qr_admin_token');
+      if (!activeToken) {
+        const hydrated = await hydratePersistentAuth();
+        activeToken = hydrated.adminToken;
+      }
+      if (cancelled) return;
+      if (!activeToken) {
         if (onLogout) onLogout();
         else navigate('/admin/login');
+        return;
       }
-    }).catch(() => {});
+      if (activeToken !== token) {
+        setToken(activeToken);
+      }
+      try {
+        const res = await api.verifyAdminSession(activeToken, restaurantId);
+        if (cancelled) return;
+        if (res && res.valid === false) {
+          await removePersistentToken('qr_admin_token');
+          if (onLogout) onLogout();
+          else navigate('/admin/login');
+        } else if (res?.valid && res?.kitchenToken) {
+          await setPersistentToken('qr_kitchen_token', res.kitchenToken);
+        }
+      } catch {
+        // Offline / temporary check failure: keep permanently saved admin session active
+      }
+    })();
     return () => { cancelled = true; };
   }, [token, navigate, restaurantId, onLogout]);
 
@@ -625,7 +648,8 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
         newPassword: adminResetNewPass.trim(),
       });
       if (res?.token) {
-        localStorage.setItem('qr_admin_token', res.token);
+        await setPersistentToken('qr_admin_token', res.token);
+        setToken(res.token);
       }
       setAdminResetStatus({
         error: '',
@@ -784,8 +808,8 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
     }
   }, [toastMessage]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('qr_admin_token');
+  const handleLogout = async () => {
+    await removePersistentToken('qr_admin_token');
     if (onLogout) {
       onLogout();
     } else {

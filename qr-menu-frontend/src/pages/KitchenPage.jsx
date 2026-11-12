@@ -22,6 +22,12 @@ import { api } from '../api';
 import { socket } from '../socket';
 import { parseUtcTimestamp } from '../utils/time';
 import { isParcelTable, formatTableLabel } from '../utils/tableDisplay';
+import {
+  getSyncToken,
+  hydratePersistentAuth,
+  removePersistentToken,
+  setPersistentToken,
+} from '../utils/persistentAuth';
 
 export default function KitchenPage({ embedded = false }) {
   const [tickets, setTickets] = useState([]);
@@ -40,8 +46,8 @@ export default function KitchenPage({ embedded = false }) {
   const alertTimeoutRef = useRef(null);
 
   // Kitchen password protection & reset states
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(() => !getSyncToken('qr_kitchen_token'));
+  const [isUnlocked, setIsUnlocked] = useState(() => Boolean(getSyncToken('qr_kitchen_token')));
   const [kitchenPassInput, setKitchenPassInput] = useState('');
   const [showKitchenPass, setShowKitchenPass] = useState(false);
   const [authError, setAuthError] = useState('');
@@ -146,7 +152,7 @@ export default function KitchenPage({ embedded = false }) {
       const targetId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
       const res = await api.kitchenLogin(kitchenPassInput, targetId);
       if (res?.token) {
-        localStorage.setItem('qr_kitchen_token', res.token);
+        await setPersistentToken('qr_kitchen_token', res.token);
       }
       isInitialLoadRef.current = true;
       setIsUnlocked(true);
@@ -160,7 +166,7 @@ export default function KitchenPage({ embedded = false }) {
   };
 
   const handleKitchenLogout = () => {
-    localStorage.removeItem('qr_kitchen_token');
+    removePersistentToken('qr_kitchen_token');
     setIsUnlocked(false);
     setTickets([]);
     prevTicketStatusMapRef.current = new Map();
@@ -191,7 +197,7 @@ export default function KitchenPage({ embedded = false }) {
       };
       const res = await api.resetKitchenPassword(payload);
       if (res?.token) {
-        localStorage.setItem('qr_kitchen_token', res.token);
+        await setPersistentToken('qr_kitchen_token', res.token);
       }
       setResetStatus({ error: '', success: res.message || 'Kitchen password updated!', loading: false });
       setIsUnlocked(true);
@@ -304,21 +310,34 @@ export default function KitchenPage({ embedded = false }) {
       }
       setRestaurantId(resolvedId);
 
-      const savedToken = localStorage.getItem('qr_kitchen_token');
+      const { adminToken, kitchenToken } = await hydratePersistentAuth();
+      let savedToken = kitchenToken || getSyncToken('qr_kitchen_token');
+
+      if (!savedToken && adminToken) {
+        try {
+          const adminCheck = await api.verifyAdminSession(adminToken, resolvedId);
+          if (adminCheck?.valid && adminCheck?.kitchenToken) {
+            savedToken = adminCheck.kitchenToken;
+            await setPersistentToken('qr_kitchen_token', savedToken);
+          }
+        } catch {}
+      }
+
       if (savedToken) {
+        setIsUnlocked(true);
+        setIsCheckingAuth(false);
         try {
           const verify = await api.verifyKitchenSession(savedToken, resolvedId);
-          if (verify?.valid) {
-            setIsUnlocked(true);
-            await loadTickets(resolvedId);
-          } else {
-            localStorage.removeItem('qr_kitchen_token');
+          if (verify && verify.valid === false) {
+            await removePersistentToken('qr_kitchen_token');
             setIsUnlocked(false);
             setIsLoading(false);
+          } else {
+            await loadTickets(resolvedId);
           }
         } catch {
-          setIsUnlocked(false);
-          setIsLoading(false);
+          // Offline / temporary check failure: keep saved persistent kitchen unlock active
+          await loadTickets(resolvedId);
         }
       } else {
         setIsUnlocked(false);
@@ -361,7 +380,7 @@ export default function KitchenPage({ embedded = false }) {
       const targetId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
       pollCountRef.current += 1;
       if (pollCountRef.current % 8 === 0) {
-        const tok = localStorage.getItem('qr_kitchen_token');
+        const tok = getSyncToken('qr_kitchen_token');
         const check = await api.verifyKitchenSession(tok, targetId).catch(() => ({ valid: true }));
         if (check && check.valid === false) {
           handleKitchenLogout();

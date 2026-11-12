@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, ArrowRight, AlertCircle, ShieldCheck, Phone, MapPin, Eye, EyeOff, KeyRound } from 'lucide-react';
 import KrishLogo from '../components/KrishLogo';
 import { api } from '../api';
+import { hydratePersistentAuth, removePersistentToken, setPersistentToken } from '../utils/persistentAuth';
 
 export default function AdminLoginPage({ embedded = false, onLoginSuccess }) {
   const navigate = useNavigate();
@@ -11,6 +12,33 @@ export default function AdminLoginPage({ embedded = false, onLoginSuccess }) {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    hydratePersistentAuth().then(async ({ adminToken }) => {
+      if (cancelled || !adminToken) return;
+      try {
+        const res = await api.verifyAdminSession(adminToken);
+        if (cancelled) return;
+        if (res && res.valid === false) {
+          await removePersistentToken('qr_admin_token');
+          return;
+        }
+        if (res?.kitchenToken) {
+          await setPersistentToken('qr_kitchen_token', res.kitchenToken);
+        }
+        if (onLoginSuccess) onLoginSuccess(adminToken);
+        else navigate('/admin');
+      } catch {
+        // Offline / transient check error: keep saved owner session active
+        if (!cancelled) {
+          if (onLoginSuccess) onLoginSuccess(adminToken);
+          else navigate('/admin');
+        }
+      }
+    });
+    return () => { cancelled = true; };
+  }, [navigate, onLoginSuccess]);
 
   // In-section Reset Admin Password workflow
   const [isResetMode, setIsResetMode] = useState(false);
@@ -27,7 +55,10 @@ export default function AdminLoginPage({ embedded = false, onLoginSuccess }) {
 
     try {
       const res = await api.adminLogin(username, password);
-      localStorage.setItem('qr_admin_token', res.token);
+      await setPersistentToken('qr_admin_token', res.token);
+      if (res?.kitchenToken) {
+        await setPersistentToken('qr_kitchen_token', res.kitchenToken);
+      }
       if (onLoginSuccess) {
         onLoginSuccess(res.token);
       } else {

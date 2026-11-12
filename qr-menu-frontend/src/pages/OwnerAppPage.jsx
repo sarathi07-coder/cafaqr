@@ -3,10 +3,17 @@ import { LayoutDashboard, ChefHat, ShieldCheck, Share, X } from 'lucide-react';
 import AdminDashboardPage from './AdminDashboardPage';
 import AdminLoginPage from './AdminLoginPage';
 import KitchenPage from './KitchenPage';
+import { api } from '../api';
+import {
+  getSyncToken,
+  hydratePersistentAuth,
+  removePersistentToken,
+  setPersistentToken,
+} from '../utils/persistentAuth';
 
 export default function OwnerAppPage() {
   const [activePortal, setActivePortal] = useState('admin'); // 'admin' | 'kitchen'
-  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('qr_admin_token') || '');
+  const [adminToken, setAdminToken] = useState(() => getSyncToken('qr_admin_token'));
   const [showIosInstallTip, setShowIosInstallTip] = useState(() => {
     if (typeof window === 'undefined') return false;
     const isIos = /iPhone|iPad|iPod/i.test(window.navigator.userAgent || '');
@@ -45,11 +52,29 @@ export default function OwnerAppPage() {
     };
   }, []);
 
-  // Keep adminToken synced with localStorage when switching tabs or resetting password
+  // Restore permanent credentials from Native Capacitor Preferences / IndexedDB / Cookie & sync paired Kitchen unlock
   useEffect(() => {
-    const syncToken = () => setAdminToken(localStorage.getItem('qr_admin_token') || '');
+    let cancelled = false;
+    hydratePersistentAuth().then(async ({ adminToken: restoredAdmin, kitchenToken: restoredKitchen }) => {
+      if (cancelled) return;
+      if (restoredAdmin) {
+        setAdminToken(restoredAdmin);
+        if (!restoredKitchen) {
+          try {
+            const v = await api.verifyAdminSession(restoredAdmin);
+            if (!cancelled && v?.valid && v?.kitchenToken) {
+              await setPersistentToken('qr_kitchen_token', v.kitchenToken);
+            }
+          } catch {}
+        }
+      }
+    });
+    const syncToken = () => setAdminToken(getSyncToken('qr_admin_token'));
     window.addEventListener('storage', syncToken);
-    return () => window.removeEventListener('storage', syncToken);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('storage', syncToken);
+    };
   }, []);
 
   const isAdminUnlocked = Boolean(adminToken);
@@ -145,14 +170,14 @@ export default function OwnerAppPage() {
             <AdminDashboardPage
               embedded={true}
               onLogout={() => {
-                localStorage.removeItem('qr_admin_token');
+                removePersistentToken('qr_admin_token');
                 setAdminToken('');
               }}
             />
           ) : (
             <AdminLoginPage
               embedded={true}
-              onLoginSuccess={(tok) => setAdminToken(tok || localStorage.getItem('qr_admin_token') || '')}
+              onLoginSuccess={(tok) => setAdminToken(tok || getSyncToken('qr_admin_token'))}
             />
           )
         ) : (
