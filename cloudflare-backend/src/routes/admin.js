@@ -356,13 +356,23 @@ admin.post('/orders/:id/settle', async (c) => {
     ).bind(paymentMethod, orderId).run();
 
     if (ord.session_token) {
-      await c.env.DB.prepare(
-        `UPDATE customer_sessions SET is_active = 0 WHERE session_token = ?`
-      ).bind(ord.session_token).run();
+      const remSess = await c.env.DB.prepare(
+        `SELECT COUNT(*) as count FROM orders WHERE session_token = ? AND status NOT IN ('PAID', 'CANCELLED')`
+      ).bind(ord.session_token).first();
+      if (Number(remSess?.count || 0) === 0) {
+        await c.env.DB.prepare(
+          `UPDATE customer_sessions SET is_active = 0 WHERE session_token = ?`
+        ).bind(ord.session_token).run();
+      }
     } else if (ord.table_id) {
-      await c.env.DB.prepare(
-        `UPDATE customer_sessions SET is_active = 0 WHERE table_id = ?`
-      ).bind(ord.table_id).run();
+      const remTable = await c.env.DB.prepare(
+        `SELECT COUNT(*) as count FROM orders WHERE table_id = ? AND status NOT IN ('PAID', 'CANCELLED')`
+      ).bind(ord.table_id).first();
+      if (Number(remTable?.count || 0) === 0) {
+        await c.env.DB.prepare(
+          `UPDATE customer_sessions SET is_active = 0 WHERE table_id = ?`
+        ).bind(ord.table_id).run();
+      }
     }
 
     return c.json({

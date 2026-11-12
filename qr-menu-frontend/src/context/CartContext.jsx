@@ -73,6 +73,8 @@ export function CartProvider({ children }) {
           customer_name: orderData.customer?.name || sessionData.customer?.name || customerName,
           customer_phone: orderData.customer?.phone || sessionData.customer?.phone || customerPhone,
           items: orderData.items || [],
+          orders: orderData.orders || [],
+          allOrderIds: orderData.allOrderIds || [],
         });
       } else {
         setActiveOrder(null);

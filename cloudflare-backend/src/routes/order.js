@@ -9,6 +9,73 @@ function generateUUID() {
   return crypto.randomUUID();
 }
 
+// Aggregate all active unsettled orders for a customer session without mutating earlier preparing/ready tickets
+async function buildAggregatedSessionOrder(db, ordersList) {
+  if (!Array.isArray(ordersList) || ordersList.length === 0) return null;
+
+  const populatedOrders = [];
+  const allItems = [];
+  let combinedSubtotal = 0;
+  let combinedDiscount = 0;
+  let combinedTax = 0;
+  let combinedTotal = 0;
+  const combinedNotes = [];
+
+  for (const ord of ordersList) {
+    const itemsRes = await db.prepare(
+      `SELECT oi.*, mi.name, mi.photo_url, mi.is_veg, mi.category
+       FROM order_items oi
+       JOIN menu_items mi ON oi.menu_item_id = mi.id
+       WHERE oi.order_id = ?
+       ORDER BY oi.created_at ASC`
+    )
+      .bind(ord.id)
+      .all();
+
+    const ordItems = (itemsRes.results || []).map((it) => ({
+      ...it,
+      order_id: ord.id,
+      order_status: ord.status,
+      created_at: toUtcIso(it.created_at),
+    }));
+
+    populatedOrders.push({
+      ...ord,
+      created_at: toUtcIso(ord.created_at),
+      updated_at: toUtcIso(ord.updated_at),
+      items: ordItems,
+    });
+
+    allItems.push(...ordItems);
+    combinedSubtotal += Number(ord.subtotal || 0);
+    combinedDiscount += Number(ord.discount_amount || 0);
+    combinedTax += Number(ord.tax_amount || 0);
+    combinedTotal += Number(ord.total || 0);
+    if (ord.notes) combinedNotes.push(ord.notes);
+  }
+
+  const pendingOrder = [...populatedOrders].reverse().find((o) => o.status === 'PENDING');
+  const latestOrder = populatedOrders[populatedOrders.length - 1];
+  const primaryOrder = pendingOrder || latestOrder;
+
+  return {
+    ...primaryOrder,
+    id: primaryOrder.id,
+    orderId: primaryOrder.id,
+    status: latestOrder.status,
+    subtotal: Math.round(combinedSubtotal * 100) / 100,
+    discount_amount: Math.round(combinedDiscount * 100) / 100,
+    tax_amount: Math.round(combinedTax * 100) / 100,
+    total: Math.round(combinedTotal * 100) / 100,
+    notes: combinedNotes.join(' • '),
+    created_at: populatedOrders[0].created_at,
+    updated_at: latestOrder.updated_at || latestOrder.created_at,
+    items: allItems,
+    orders: populatedOrders,
+    allOrderIds: populatedOrders.map((o) => o.id),
+  };
+}
+
 // GET /api/order/tables/default
 order.get('/tables/default', async (c) => {
   try {
@@ -77,31 +144,19 @@ order.post('/session/init', async (c) => {
     }
 
     if (existingSession) {
-      // Find any active order for this session
-      const activeOrder = await c.env.DB.prepare(
-        `SELECT o.id, o.status, o.subtotal, o.tax_percentage, o.tax_amount, o.total, o.created_at, o.notes,
+      // Find all active unsettled orders for this session in chronological order
+      const activeOrdersRes = await c.env.DB.prepare(
+        `SELECT o.id, o.status, o.subtotal, o.discount_amount, o.tax_percentage, o.tax_amount, o.total, o.created_at, o.updated_at, o.notes,
                 c.name as customer_name, c.phone as customer_phone
          FROM orders o
          LEFT JOIN customers c ON o.customer_id = c.id
          WHERE (o.session_token = ? OR o.session_id = ?) AND o.status NOT IN ('PAID', 'CANCELLED')
-         ORDER BY o.created_at DESC LIMIT 1`
+         ORDER BY o.created_at ASC`
       )
         .bind(existingSession.session_token, existingSession.id)
-        .first();
+        .all();
 
-      let items = [];
-      if (activeOrder) {
-        const itemsRes = await c.env.DB.prepare(
-          `SELECT oi.*, mi.name, mi.photo_url, mi.is_veg, mi.category
-           FROM order_items oi
-           JOIN menu_items mi ON oi.menu_item_id = mi.id
-           WHERE oi.order_id = ?
-           ORDER BY oi.created_at ASC`
-        )
-          .bind(activeOrder.id)
-          .all();
-        items = itemsRes.results || [];
-      }
+      const activeOrder = await buildAggregatedSessionOrder(c.env.DB, activeOrdersRes.results || []);
 
       const resolvedCustName = activeOrder?.customer_name || existingSession.customer_name || null;
       const resolvedCustPhone = activeOrder?.customer_phone || existingSession.customer_phone || null;
@@ -119,10 +174,8 @@ order.post('/session/init', async (c) => {
         hasActiveOrder: Boolean(activeOrder),
         order: activeOrder ? {
           ...activeOrder,
-          created_at: toUtcIso(activeOrder.created_at),
           customer_name: resolvedCustName,
           customer: resolvedCustName ? { name: resolvedCustName, phone: resolvedCustPhone } : null,
-          items,
         } : null,
         table,
       });
@@ -183,14 +236,16 @@ order.get('/session/:token', async (c) => {
       return c.json({ error: 'Session not found' }, 404);
     }
 
-    const activeOrder = await c.env.DB.prepare(
-      `SELECT id, status, subtotal, tax_amount, total
+    const activeOrdersRes = await c.env.DB.prepare(
+      `SELECT id, status, subtotal, discount_amount, tax_amount, total, created_at, updated_at, notes
        FROM orders
        WHERE session_token = ? AND status NOT IN ('PAID', 'CANCELLED')
-       ORDER BY created_at DESC LIMIT 1`
+       ORDER BY created_at ASC`
     )
       .bind(token)
-      .first();
+      .all();
+
+    const activeOrder = await buildAggregatedSessionOrder(c.env.DB, activeOrdersRes.results || []);
 
     return c.json({
       session,
@@ -220,52 +275,37 @@ order.get('/table/:tableId/session', async (c) => {
 
     if (!table) return c.json({ error: 'Table not found' }, 404);
 
-    let activeOrder = null;
+    let activeOrders = [];
     if (sessionToken) {
-      activeOrder = await c.env.DB.prepare(
+      const ordersRes = await c.env.DB.prepare(
         `SELECT o.*, c.name as customer_name, c.phone as customer_phone
          FROM orders o
          LEFT JOIN customers c ON o.customer_id = c.id
          WHERE o.table_id = ? AND o.session_token = ? AND o.status NOT IN ('PAID', 'CANCELLED')
-         ORDER BY o.created_at DESC LIMIT 1`
+         ORDER BY o.created_at ASC`
       )
         .bind(tableId, sessionToken)
-        .first();
+        .all();
+      activeOrders = ordersRes.results || [];
     } else {
-      activeOrder = await c.env.DB.prepare(
+      const ordersRes = await c.env.DB.prepare(
         `SELECT o.*, c.name as customer_name, c.phone as customer_phone
          FROM orders o
          LEFT JOIN customers c ON o.customer_id = c.id
          WHERE o.table_id = ? AND o.status NOT IN ('PAID', 'CANCELLED')
-         ORDER BY o.created_at DESC LIMIT 1`
+         ORDER BY o.created_at ASC`
       )
         .bind(tableId)
-        .first();
+        .all();
+      activeOrders = ordersRes.results || [];
     }
 
-    let items = [];
-    if (activeOrder) {
-      const itemsRes = await c.env.DB.prepare(
-        `SELECT oi.*, mi.name, mi.photo_url, mi.is_veg, mi.category
-         FROM order_items oi
-         JOIN menu_items mi ON oi.menu_item_id = mi.id
-         WHERE oi.order_id = ?
-         ORDER BY oi.created_at ASC`
-      )
-        .bind(activeOrder.id)
-        .all();
-      items = itemsRes.results || [];
-    }
+    const activeOrder = await buildAggregatedSessionOrder(c.env.DB, activeOrders);
 
     return c.json({
       table,
       hasActiveOrder: Boolean(activeOrder),
-      order: activeOrder ? {
-        ...activeOrder,
-        created_at: toUtcIso(activeOrder.created_at),
-        updated_at: toUtcIso(activeOrder.updated_at),
-        items,
-      } : null,
+      order: activeOrder || null,
     });
   } catch (err) {
     console.error('Table session lookup error:', err);
@@ -382,8 +422,10 @@ order.post('/', async (c) => {
       await c.env.DB.prepare('INSERT INTO customer_sessions (id, session_token, table_id, restaurant_id, customer_id, session_label, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)').bind(sId, sToken, tableId, restaurantId, customerId, sLabel).run();
     }
 
-    // Check if active order already exists for this session
-    let existingOrder = await c.env.DB.prepare("SELECT id, status FROM orders WHERE session_token = ? AND status NOT IN ('PAID', 'CANCELLED') LIMIT 1").bind(sToken).first();
+    // Reuse an order ONLY if it is still unstarted ('PENDING'); once PREPARING/READY/SERVED, create a brand-new order ticket
+    let existingOrder = await c.env.DB.prepare(
+      "SELECT id, status FROM orders WHERE session_token = ? AND status = 'PENDING' ORDER BY created_at DESC LIMIT 1"
+    ).bind(sToken).first();
     let orderId = existingOrder ? existingOrder.id : generateUUID();
     let isExistingSession = Boolean(existingOrder);
 
@@ -396,8 +438,7 @@ order.post('/', async (c) => {
       if (notes) {
         await c.env.DB.prepare("UPDATE orders SET notes = COALESCE(notes || '; ', '') || ? WHERE id = ?").bind(notes, orderId).run();
       }
-      // Re-alert kitchen with PENDING status and ensure customer link stays updated when new items are added
-      await c.env.DB.prepare("UPDATE orders SET customer_id = COALESCE(customer_id, ?), status = 'PENDING', updated_at = datetime('now') WHERE id = ?").bind(customerId, orderId).run();
+      await c.env.DB.prepare("UPDATE orders SET customer_id = COALESCE(customer_id, ?), updated_at = datetime('now') WHERE id = ?").bind(customerId, orderId).run();
     }
 
     // Insert items
@@ -445,17 +486,53 @@ order.post('/', async (c) => {
   }
 });
 
-// POST /api/order/:id/items (Add Extra Dishes to Running Bill)
+// POST /api/order/:id/items (Add Extra Dishes — spawns a brand-new PENDING ticket if kitchen already started preparing)
 order.post('/:id/items', async (c) => {
   const orderId = c.req.param('id');
   try {
     const body = await c.req.json().catch(() => ({}));
     const items = body.items || [];
 
-    const ord = await c.env.DB.prepare('SELECT id, restaurant_id, status FROM orders WHERE id = ?').bind(orderId).first();
+    const ord = await c.env.DB.prepare(
+      `SELECT id, restaurant_id, table_id, customer_id, session_id, session_token, session_label, tax_percentage, status
+       FROM orders WHERE id = ?`
+    ).bind(orderId).first();
     if (!ord) return c.json({ error: 'Order not found' }, 404);
     if (['PAID', 'CANCELLED'].includes(ord.status)) {
       return c.json({ error: 'Cannot add items to a settled or cancelled order' }, 400);
+    }
+
+    // Once kitchen starts preparing (PREPARING / READY / SERVED), the existing order is locked:
+    // never pull it back to PENDING or combine new items into it; create a fresh PENDING ticket instead.
+    let targetOrderId = orderId;
+    let isNewTicket = false;
+
+    if (ord.status !== 'PENDING') {
+      const openPending = ord.session_token
+        ? await c.env.DB.prepare(
+            "SELECT id FROM orders WHERE session_token = ? AND status = 'PENDING' ORDER BY created_at DESC LIMIT 1"
+          ).bind(ord.session_token).first()
+        : null;
+
+      if (openPending?.id) {
+        targetOrderId = openPending.id;
+      } else {
+        targetOrderId = generateUUID();
+        isNewTicket = true;
+        await c.env.DB.prepare(
+          `INSERT INTO orders (id, restaurant_id, table_id, customer_id, session_id, session_token, session_label, status, subtotal, tax_percentage, tax_amount, total)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?, 0, 0)`
+        ).bind(
+          targetOrderId,
+          ord.restaurant_id,
+          ord.table_id,
+          ord.customer_id || null,
+          ord.session_id || null,
+          ord.session_token || null,
+          ord.session_label || 'Customer',
+          Number(ord.tax_percentage ?? 5.0)
+        ).run();
+      }
     }
 
     let addedCount = 0;
@@ -468,25 +545,26 @@ order.post('/:id/items', async (c) => {
         await c.env.DB.prepare(
           `INSERT INTO order_items (id, order_id, menu_item_id, quantity, price_at_order, status, special_instructions)
            VALUES (?, ?, ?, ?, ?, 'PENDING', ?)`
-        ).bind(generateUUID(), orderId, mItem.id, qty, price, it.special_instructions || null).run();
+        ).bind(generateUUID(), targetOrderId, mItem.id, qty, price, it.special_instructions || null).run();
         addedCount += qty;
       }
     }
 
-    // Set order back to PENDING so chefs are alerted
-    await c.env.DB.prepare("UPDATE orders SET status = 'PENDING', updated_at = datetime('now') WHERE id = ?").bind(orderId).run();
+    await c.env.DB.prepare("UPDATE orders SET updated_at = datetime('now') WHERE id = ?").bind(targetOrderId).run();
 
-    const totals = await recalculateOrderTotals(c.env.DB, orderId, ord.restaurant_id);
+    const totals = await recalculateOrderTotals(c.env.DB, targetOrderId, ord.restaurant_id);
 
     return c.json({
       success: true,
-      orderId,
+      orderId: targetOrderId,
+      isNewTicket,
       itemsAdded: addedCount,
       newTotal: totals.total,
       total: totals.total,
       totals,
       order: {
-        id: orderId,
+        id: targetOrderId,
+        status: 'PENDING',
         total: totals.total,
         subtotal: totals.subtotal,
       },
@@ -497,15 +575,15 @@ order.post('/:id/items', async (c) => {
   }
 });
 
-// DELETE /api/order/:id/items/:itemId (Cancel a PENDING item before chef starts cooking)
+// DELETE /api/order/:id/items/:itemId (Cancel a PENDING item ONLY before chef starts preparing)
 order.delete('/:id/items/:itemId', async (c) => {
   const orderId = c.req.param('id');
   const itemId = c.req.param('itemId');
   try {
     const ord = await c.env.DB.prepare('SELECT id, restaurant_id, status FROM orders WHERE id = ?').bind(orderId).first();
     if (!ord) return c.json({ error: 'Order not found' }, 404);
-    if (['PAID', 'CANCELLED'].includes(ord.status)) {
-      return c.json({ error: 'Cannot remove items from a settled or cancelled order' }, 400);
+    if (ord.status !== 'PENDING') {
+      return c.json({ error: `Cannot modify order once kitchen is ${ord.status.toLowerCase()}.` }, 400);
     }
 
     const targetItem = await c.env.DB.prepare('SELECT id, status FROM order_items WHERE id = ? AND order_id = ?')
@@ -519,22 +597,10 @@ order.delete('/:id/items/:itemId', async (c) => {
     await c.env.DB.prepare('DELETE FROM order_items WHERE id = ? AND order_id = ?').bind(itemId, orderId).run();
 
     const remainingRes = await c.env.DB.prepare(
-      'SELECT status FROM order_items WHERE order_id = ?'
-    ).bind(orderId).all();
-    const remainingStatuses = (remainingRes.results || []).map((r) => r.status);
-
-    let nextOrderStatus = ord.status;
-    if (remainingStatuses.length === 0) {
-      nextOrderStatus = 'CANCELLED';
-    } else if (remainingStatuses.includes('PENDING')) {
-      nextOrderStatus = 'PENDING';
-    } else if (remainingStatuses.includes('PREPARING')) {
-      nextOrderStatus = 'PREPARING';
-    } else if (remainingStatuses.includes('READY')) {
-      nextOrderStatus = 'READY';
-    } else {
-      nextOrderStatus = 'SERVED';
-    }
+      'SELECT COUNT(*) as count FROM order_items WHERE order_id = ?'
+    ).bind(orderId).first();
+    const remainingCount = Number(remainingRes?.count || 0);
+    const nextOrderStatus = remainingCount === 0 ? 'CANCELLED' : 'PENDING';
 
     await c.env.DB.prepare("UPDATE orders SET status = ?, updated_at = datetime('now') WHERE id = ?")
       .bind(nextOrderStatus, orderId)
@@ -556,7 +622,7 @@ order.delete('/:id/items/:itemId', async (c) => {
   }
 });
 
-// PUT /api/order/:id/notes (Update Cooking Notes)
+// PUT /api/order/:id/notes (Update Cooking Notes — locked once kitchen starts preparing)
 order.put('/:id/notes', async (c) => {
   const orderId = c.req.param('id');
   try {
@@ -564,8 +630,8 @@ order.put('/:id/notes', async (c) => {
     const ord = await c.env.DB.prepare('SELECT id, status FROM orders WHERE id = ?').bind(orderId).first();
     if (!ord) return c.json({ error: 'Order not found' }, 404);
 
-    if (['SERVED', 'PAID', 'CANCELLED'].includes(ord.status)) {
-      return c.json({ error: `Cannot modify notes when order is ${ord.status}` }, 400);
+    if (ord.status !== 'PENDING') {
+      return c.json({ error: `Cannot modify notes once kitchen has started (${ord.status})` }, 400);
     }
 
     await c.env.DB.prepare("UPDATE orders SET notes = ?, updated_at = datetime('now') WHERE id = ?")
@@ -658,12 +724,23 @@ order.post('/upi/notify', async (c) => {
     if (!utr) return c.json({ error: 'UTR transaction number is required' }, 400);
 
     if (orderId) {
-      await c.env.DB.prepare(
-        `UPDATE orders
-         SET payment_method = 'UPI',
-             notes = COALESCE(notes || '; ', '') || ?
-         WHERE id = ?`
-      ).bind(`Paid via UPI (UTR: ${utr}, VPA: ${upiId || 'N/A'})`, orderId).run();
+      const utrNote = `Paid via UPI (UTR: ${utr}, VPA: ${upiId || 'N/A'})`;
+      const targetOrd = await c.env.DB.prepare('SELECT session_token FROM orders WHERE id = ?').bind(orderId).first();
+      if (targetOrd?.session_token) {
+        await c.env.DB.prepare(
+          `UPDATE orders
+           SET payment_method = 'UPI',
+               notes = COALESCE(notes || '; ', '') || ?
+           WHERE session_token = ? AND status NOT IN ('PAID', 'CANCELLED')`
+        ).bind(utrNote, targetOrd.session_token).run();
+      } else {
+        await c.env.DB.prepare(
+          `UPDATE orders
+           SET payment_method = 'UPI',
+               notes = COALESCE(notes || '; ', '') || ?
+           WHERE id = ?`
+        ).bind(utrNote, orderId).run();
+      }
     }
 
     return c.json({
@@ -839,11 +916,18 @@ order.put('/:id/dismiss', async (c) => {
       .run();
 
     if (ord.session_token) {
-      await c.env.DB.prepare(
-        `UPDATE customer_sessions SET is_active = 0, last_active = datetime('now') WHERE session_token = ?`
+      const remSess = await c.env.DB.prepare(
+        `SELECT COUNT(*) as count FROM orders WHERE session_token = ? AND status NOT IN ('PAID', 'CANCELLED')`
       )
         .bind(ord.session_token)
-        .run();
+        .first();
+      if (Number(remSess?.count || 0) === 0) {
+        await c.env.DB.prepare(
+          `UPDATE customer_sessions SET is_active = 0, last_active = datetime('now') WHERE session_token = ?`
+        )
+          .bind(ord.session_token)
+          .run();
+      }
     }
 
     const remainingRes = await c.env.DB.prepare(
@@ -938,7 +1022,7 @@ order.get('/:id/split', async (c) => {
 
   try {
     const ord = await c.env.DB.prepare(
-      `SELECT o.id, o.table_id, o.subtotal, o.discount_amount, o.coupon_code, o.tax_percentage, o.tax_amount, o.total,
+      `SELECT o.id, o.table_id, o.session_token, o.subtotal, o.discount_amount, o.coupon_code, o.tax_percentage, o.tax_amount, o.total,
               r.currency, t.number AS table_number
        FROM orders o
        JOIN restaurants r ON o.restaurant_id = r.id
@@ -948,7 +1032,28 @@ order.get('/:id/split', async (c) => {
 
     if (!ord) return c.json({ error: 'Order not found' }, 404);
 
-    const totalAmount = Number(ord.total || 0);
+    let splitSubtotal = Number(ord.subtotal || 0);
+    let splitDiscount = Number(ord.discount_amount || 0);
+    let splitTax = Number(ord.tax_amount || 0);
+    let totalAmount = Number(ord.total || 0);
+
+    if (ord.session_token) {
+      const sessAgg = await c.env.DB.prepare(
+        `SELECT COALESCE(SUM(subtotal), 0) AS subtotal,
+                COALESCE(SUM(discount_amount), 0) AS discount_amount,
+                COALESCE(SUM(tax_amount), 0) AS tax_amount,
+                COALESCE(SUM(total), 0) AS total
+         FROM orders
+         WHERE session_token = ? AND status NOT IN ('PAID', 'CANCELLED')`
+      ).bind(ord.session_token).first();
+      if (sessAgg && Number(sessAgg.total || 0) > 0) {
+        splitSubtotal = Number(sessAgg.subtotal || 0);
+        splitDiscount = Number(sessAgg.discount_amount || 0);
+        splitTax = Number(sessAgg.tax_amount || 0);
+        totalAmount = Number(sessAgg.total || 0);
+      }
+    }
+
     const currency = ord.currency || '₹';
 
     const totalPaise = Math.round(totalAmount * 100);
@@ -968,10 +1073,10 @@ order.get('/:id/split', async (c) => {
       orderId,
       tableNumber: ord.table_number,
       currency,
-      totalAmount,
-      subtotal: Number(ord.subtotal || 0),
-      discountAmount: Number(ord.discount_amount || 0),
-      taxAmount: Number(ord.tax_amount || 0),
+      totalAmount: parseFloat(totalAmount.toFixed(2)),
+      subtotal: parseFloat(splitSubtotal.toFixed(2)),
+      discountAmount: parseFloat(splitDiscount.toFixed(2)),
+      taxAmount: parseFloat(splitTax.toFixed(2)),
       splitWays: ways,
       perPerson: shares[0].amount,
       perPersonAmount: shares[0].amount,

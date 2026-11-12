@@ -100,12 +100,23 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
     return { vegCount, nonVegCount, vegTotal, nonVegTotal };
   }, [activeOrder]);
 
-  const isOrderEditable = Boolean(hasActiveSession && activeOrder && activeOrder.status === 'PENDING');
+  const isOrderEditable = Boolean(
+    hasActiveSession &&
+      activeOrder &&
+      ((Array.isArray(activeOrder.orders) && activeOrder.orders.some((o) => o.status === 'PENDING')) ||
+        activeOrder.status === 'PENDING')
+  );
 
-  // Remove dish from active order (allowed ONLY before preparation starts for that dish)
-  const handleRemoveActiveItem = async (itemId) => {
-    if (!activeOrder?.id) return;
+  // Remove dish from active order (allowed ONLY before preparation starts for that dish's order)
+  const handleRemoveActiveItem = async (itemId, itemOrderId) => {
+    const targetOrderId = itemOrderId || activeOrder?.id;
+    if (!targetOrderId) return;
     const targetItem = (activeOrder.items || []).find((i) => i.id === itemId);
+    const parentStatus = targetItem?.order_status || activeOrder.status;
+    if (parentStatus && parentStatus !== 'PENDING') {
+      alert(`Cannot remove dish because kitchen is already ${parentStatus.toLowerCase()}.`);
+      return;
+    }
     if (targetItem && targetItem.status && targetItem.status !== 'PENDING') {
       alert(`Cannot remove dish because it is already ${targetItem.status.toLowerCase()}.`);
       return;
@@ -113,7 +124,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
     if (!window.confirm('Are you sure you want to remove this dish from your order?')) return;
     setIsRemovingItem(true);
     try {
-      await api.removeOrderItem(activeOrder.id, itemId);
+      await api.removeOrderItem(targetOrderId, itemId);
       await checkSession(tableId);
     } catch (err) {
       alert(err.message || 'Failed to remove dish');
@@ -212,7 +223,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
           unit_price: parseFloat(it.price),
         }));
 
-        await api.addItemsToOrder(activeOrder.id, itemsPayload);
+        const addRes = await api.addItemsToOrder(activeOrder.id, itemsPayload);
 
         playOrderConfirmationSound(true);
         triggerConfetti({
@@ -223,7 +234,13 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
 
         clearCart();
         await checkSession(tableId);
-        if (onOrderSuccess) onOrderSuccess('Added to your table bill & sent to kitchen!');
+        if (onOrderSuccess) {
+          onOrderSuccess(
+            addRes?.isNewTicket
+              ? `New order sent to kitchen! Ticket #${String(addRes.orderId || '').slice(0, 6)}`
+              : 'Added to your table bill & sent to kitchen!'
+          );
+        }
         onClose();
       } else {
         // Create initial table order
@@ -393,7 +410,10 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                           </div>
                           <div className="min-w-0">
                             <span className="font-bold text-white text-xs block truncate">{itemName}</span>
-                            <span className="text-[10px] text-stone-400 font-mono">₹{parseFloat(it.price_at_order || 0).toFixed(2)} each</span>
+                            <span className="text-[10px] text-stone-400 font-mono">
+                              ₹{parseFloat(it.price_at_order || 0).toFixed(2)} each
+                              {(activeOrder.orders?.length || 0) > 1 && it.order_id ? ` • #${String(it.order_id).slice(0, 6)}` : ''}
+                            </span>
                           </div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
@@ -419,7 +439,7 @@ export default function CartDrawer({ isOpen, onClose, onOrderSuccess, onOpenUpiM
                             <button
                               type="button"
                               disabled={isRemovingItem}
-                              onClick={() => handleRemoveActiveItem(it.id)}
+                              onClick={() => handleRemoveActiveItem(it.id, it.order_id)}
                               className="px-2 py-1 text-rose-400 hover:text-white hover:bg-rose-600 border border-rose-500/30 hover:border-rose-600 rounded-lg transition flex items-center gap-1 text-[11px] font-bold cursor-pointer disabled:opacity-50"
                               title="Cancel / Remove dish"
                             >
