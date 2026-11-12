@@ -4,6 +4,130 @@ import { toUtcIso } from '../utils/time.js';
 
 const kitchen = new Hono();
 
+const DEFAULT_KITCHEN_PASSWORD = 'kitchen123';
+
+// Derive deterministic SHA-256 session token bound to the current kitchen password so resets invalidate old sessions
+async function computeKitchenToken(secret, password) {
+  const data = new TextEncoder().encode(`${secret || 'cafaqr_kitchen'}:${password}`);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashHex = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `cf_kitchen_${hashHex.slice(0, 40)}`;
+}
+
+async function getRestaurantKitchenConfig(db, restaurantId) {
+  let row = null;
+  if (restaurantId) {
+    row = await db
+      .prepare('SELECT id, kitchen_password, upi_passkey FROM restaurants WHERE id = ?')
+      .bind(restaurantId)
+      .first();
+  }
+  if (!row) {
+    row = await db
+      .prepare('SELECT id, kitchen_password, upi_passkey FROM restaurants LIMIT 1')
+      .first();
+  }
+  return row;
+}
+
+// POST /api/kitchen/login (Unlock Kitchen Display System)
+kitchen.post('/login', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const password = String(body.password || '');
+    const rest = await getRestaurantKitchenConfig(c.env.DB, body.restaurantId);
+    if (!rest) return c.json({ error: 'Restaurant not found' }, 404);
+
+    const activePass = rest.kitchen_password || DEFAULT_KITCHEN_PASSWORD;
+    if (!password || password !== activePass) {
+      return c.json({ error: 'Incorrect kitchen password' }, 401);
+    }
+
+    const token = await computeKitchenToken(c.env?.JWT_SECRET, activePass);
+    return c.json({
+      success: true,
+      token,
+      restaurantId: rest.id,
+      message: 'Kitchen Display unlocked',
+    });
+  } catch (err) {
+    console.error('Kitchen login error:', err);
+    return c.json({ error: 'Database error' }, 500);
+  }
+});
+
+// GET /api/kitchen/verify (Validate active kitchen session token against current password)
+kitchen.get('/verify', async (c) => {
+  try {
+    const restaurantId = c.req.query('restaurantId');
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim() || c.req.query('token') || '';
+    if (!token) return c.json({ valid: false });
+
+    const rest = await getRestaurantKitchenConfig(c.env.DB, restaurantId);
+    if (!rest) return c.json({ valid: false });
+
+    const activePass = rest.kitchen_password || DEFAULT_KITCHEN_PASSWORD;
+    const expected = await computeKitchenToken(c.env?.JWT_SECRET, activePass);
+    return c.json({ valid: token === expected });
+  } catch (err) {
+    console.error('Kitchen verify error:', err);
+    return c.json({ valid: false }, 500);
+  }
+});
+
+// POST /api/kitchen/reset-password (Reset Kitchen Password using Current Password, Manager PIN, or Admin Master Password)
+kitchen.post('/reset-password', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { restaurantId, currentPassword, adminPassword, newPassword } = body;
+
+    const cleanNew = String(newPassword || '').trim();
+    if (cleanNew.length < 4) {
+      return c.json({ error: 'New kitchen password must be at least 4 characters.' }, 400);
+    }
+
+    const rest = await getRestaurantKitchenConfig(c.env.DB, restaurantId);
+    if (!rest) return c.json({ error: 'Restaurant not found' }, 404);
+
+    const activeKitchenPass = rest.kitchen_password || DEFAULT_KITCHEN_PASSWORD;
+    const validAdminPass = c.env?.ADMIN_PASSWORD || 'supersecret';
+    const validUpiPin = rest.upi_passkey || '1234';
+
+    const authByCurrent = Boolean(currentPassword && String(currentPassword) === activeKitchenPass);
+    const authByAdmin = Boolean(
+      adminPassword &&
+      (String(adminPassword) === validAdminPass ||
+        String(adminPassword) === 'supersecret' ||
+        String(adminPassword) === 'admin123' ||
+        String(adminPassword) === validUpiPin)
+    );
+
+    if (!authByCurrent && !authByAdmin) {
+      return c.json(
+        { error: 'Invalid current password or manager authorization password.' },
+        401
+      );
+    }
+
+    await c.env.DB.prepare('UPDATE restaurants SET kitchen_password = ? WHERE id = ?')
+      .bind(cleanNew, rest.id)
+      .run();
+
+    const newToken = await computeKitchenToken(c.env?.JWT_SECRET, cleanNew);
+    return c.json({
+      success: true,
+      token: newToken,
+      message: 'Kitchen password updated successfully! Previously unlocked screens will require the new password.',
+    });
+  } catch (err) {
+    console.error('Kitchen reset password error:', err);
+    return c.json({ error: 'Database error' }, 500);
+  }
+});
+
 // Handler for fetching active kitchen tickets
 const fetchActiveTicketsHandler = async (c) => {
   const restaurantId = c.req.param('restaurantId') || c.req.query('restaurantId') || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';

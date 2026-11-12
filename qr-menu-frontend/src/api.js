@@ -152,6 +152,40 @@ export const api = {
   },
 
   // --- Kitchen Display System (KDS) ---
+  async kitchenLogin(password, restaurantId) {
+    const res = await fetch(`${API_BASE}/kitchen/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, restaurantId }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || 'Incorrect kitchen password');
+    return result;
+  },
+
+  async verifyKitchenSession(token, restaurantId) {
+    if (!token) return { valid: false };
+    const url = restaurantId
+      ? `${API_BASE}/kitchen/verify?restaurantId=${encodeURIComponent(restaurantId)}`
+      : `${API_BASE}/kitchen/verify`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return { valid: false };
+    return res.json();
+  },
+
+  async resetKitchenPassword({ restaurantId, currentPassword, adminPassword, newPassword }) {
+    const res = await fetch(`${API_BASE}/kitchen/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId, currentPassword, adminPassword, newPassword }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || 'Failed to reset kitchen password');
+    return result;
+  },
+
   async getKitchenTickets(restaurantId) {
     const rId = restaurantId || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
     try {

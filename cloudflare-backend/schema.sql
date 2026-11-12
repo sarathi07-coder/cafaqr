@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS restaurants (
     upi_id TEXT DEFAULT 'vallipriya1212-1@oksbi',
     upi_name TEXT DEFAULT 'Royal Spice Bistro',
     upi_passkey TEXT DEFAULT '1234',
+    kitchen_password TEXT DEFAULT 'kitchen123',
     upi_accounts TEXT DEFAULT '[]',
     created_at TEXT DEFAULT (datetime('now'))
 );
