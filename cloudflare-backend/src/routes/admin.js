@@ -863,6 +863,10 @@ admin.get('/feedback', async (c) => {
 
 // ===== INTELLIGENCE & ANALYTICS SUITE =====
 
+// IST (+05:30) "Today" predicate for SQLite UTC timestamps (`datetime('now')`)
+const istTodayExpr = (col = 'created_at') =>
+  `DATE(${col}, '+5 hours', '+30 minutes') = DATE('now', '+5 hours', '+30 minutes')`;
+
 // GET /api/admin/analytics/overview
 admin.get('/analytics/overview', async (c) => {
   const restaurantId = c.req.query('restaurantId') || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
@@ -872,13 +876,13 @@ admin.get('/analytics/overview', async (c) => {
       c.env.DB.prepare("SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND status = 'PAID'").bind(restaurantId).first(),
       c.env.DB.prepare("SELECT COALESCE(AVG(rating), 5.0) as avg_rating, COUNT(*) as review_count FROM order_feedback WHERE restaurant_id = ?").bind(restaurantId).first(),
       c.env.DB.prepare(`
-        SELECT mi.name, mi.category, SUM(oi.quantity) as count, SUM(oi.quantity * oi.price_at_order) as total_revenue
+        SELECT mi.name, mi.category, SUM(oi.quantity) as count, ROUND(SUM(oi.quantity * oi.price_at_order), 2) as total_revenue
         FROM order_items oi
         JOIN menu_items mi ON oi.menu_item_id = mi.id
         JOIN orders o ON oi.order_id = o.id
-        WHERE o.restaurant_id = ?
+        WHERE o.restaurant_id = ? AND o.status != 'CANCELLED' AND oi.status != 'CANCELLED'
         GROUP BY mi.id, mi.name, mi.category
-        ORDER BY count DESC LIMIT 5
+        ORDER BY count DESC, total_revenue DESC LIMIT 5
       `).bind(restaurantId).all(),
       c.env.DB.prepare(`
         SELECT o.id, o.table_id, o.status, o.total, o.created_at, t.number as table_number
@@ -933,7 +937,7 @@ admin.get('/analytics/today-kpi', async (c) => {
          COALESCE(SUM(discount_amount), 0) AS total_discounts,
          COALESCE(ROUND(AVG(total), 2), 0) AS average_order_value
        FROM orders
-       WHERE restaurant_id = ? AND DATE(created_at) = DATE('now')`
+       WHERE restaurant_id = ? AND status != 'CANCELLED' AND ${istTodayExpr('created_at')}`
     ).bind(restaurantId).first();
 
     const activeTablesRes = await c.env.DB.prepare(
@@ -953,7 +957,7 @@ admin.get('/analytics/today-kpi', async (c) => {
          ROUND(COALESCE(AVG(o.total), 0), 2) AS avg_spend
        FROM tables t
        JOIN orders o ON o.table_id = t.id
-       WHERE o.restaurant_id = ? AND DATE(o.created_at) = DATE('now')
+       WHERE o.restaurant_id = ? AND o.status != 'CANCELLED' AND ${istTodayExpr('o.created_at')}
        GROUP BY t.id, t.number
        ORDER BY total_revenue DESC`
     ).bind(restaurantId).all();
@@ -1037,11 +1041,11 @@ admin.get('/analytics/peak-hours', async (c) => {
   try {
     const hourlyRes = await c.env.DB.prepare(
       `SELECT 
-         CAST(strftime('%H', created_at) AS INTEGER) AS hour_of_day,
+         CAST(strftime('%H', datetime(created_at, '+5 hours', '+30 minutes')) AS INTEGER) AS hour_of_day,
          COUNT(id) AS order_count,
          COALESCE(SUM(total), 0) AS revenue
        FROM orders
-       WHERE restaurant_id = ? AND created_at >= datetime('now', '-7 days')
+       WHERE restaurant_id = ? AND status != 'CANCELLED' AND created_at >= datetime('now', '-7 days')
        GROUP BY hour_of_day
        ORDER BY hour_of_day ASC`
     ).bind(restaurantId).all();
@@ -1083,11 +1087,11 @@ admin.get('/analytics/peak-hours', async (c) => {
 
     const dowRes = await c.env.DB.prepare(
       `SELECT 
-         CAST(strftime('%w', created_at) AS INTEGER) AS dow,
+         CAST(strftime('%w', datetime(created_at, '+5 hours', '+30 minutes')) AS INTEGER) AS dow,
          COUNT(id) AS orders_count,
          COALESCE(SUM(total), 0) AS revenue
        FROM orders
-       WHERE restaurant_id = ? AND created_at >= datetime('now', '-7 days')
+       WHERE restaurant_id = ? AND status != 'CANCELLED' AND created_at >= datetime('now', '-7 days')
        GROUP BY dow
        ORDER BY dow ASC`
     ).bind(restaurantId).all();
@@ -1128,11 +1132,15 @@ admin.get('/analytics/peak-hours', async (c) => {
 admin.get('/analytics/dish-performance', async (c) => {
   const restaurantId = c.req.query('restaurantId') || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
   try {
+    const todayOrderFilter = `o.status != 'CANCELLED' AND oi.status != 'CANCELLED' AND ${istTodayExpr('o.created_at')}`;
+
     const totalSoldRes = await c.env.DB.prepare(
-      `SELECT COALESCE(SUM(oi.quantity), 0) AS total_items_sold_today
+      `SELECT 
+         COALESCE(SUM(oi.quantity), 0) AS total_items_sold_today,
+         COALESCE(SUM(oi.quantity * oi.price_at_order), 0) AS total_item_revenue_today
        FROM order_items oi
        JOIN orders o ON oi.order_id = o.id
-       WHERE o.restaurant_id = ? AND DATE(o.created_at) = DATE('now')`
+       WHERE o.restaurant_id = ? AND ${todayOrderFilter}`
     ).bind(restaurantId).first();
 
     const dishRes = await c.env.DB.prepare(
@@ -1143,15 +1151,15 @@ admin.get('/analytics/dish-performance', async (c) => {
          mi.price,
          mi.photo_url,
          mi.available,
-         COALESCE(SUM(CASE WHEN DATE(o.created_at) = DATE('now') THEN oi.quantity ELSE 0 END), 0) AS quantity_sold_today,
-         COALESCE(SUM(CASE WHEN DATE(o.created_at) = DATE('now') THEN oi.quantity * oi.price_at_order ELSE 0 END), 0) AS revenue_today,
-         COALESCE(SUM(oi.quantity), 0) AS all_time_quantity_sold
+         COALESCE(SUM(CASE WHEN ${todayOrderFilter} THEN oi.quantity ELSE 0 END), 0) AS quantity_sold_today,
+         COALESCE(SUM(CASE WHEN ${todayOrderFilter} THEN oi.quantity * oi.price_at_order ELSE 0 END), 0) AS revenue_today,
+         COALESCE(SUM(CASE WHEN o.id IS NOT NULL AND o.status != 'CANCELLED' AND oi.status != 'CANCELLED' THEN oi.quantity ELSE 0 END), 0) AS all_time_quantity_sold
        FROM menu_items mi
        LEFT JOIN order_items oi ON oi.menu_item_id = mi.id
        LEFT JOIN orders o ON oi.order_id = o.id
        WHERE mi.restaurant_id = ?
        GROUP BY mi.id, mi.name, mi.category, mi.price, mi.photo_url, mi.available
-       ORDER BY quantity_sold_today DESC, all_time_quantity_sold DESC, revenue_today DESC`
+       ORDER BY quantity_sold_today DESC, revenue_today DESC, all_time_quantity_sold DESC, mi.name ASC`
     ).bind(restaurantId).all();
 
     const dishes = (dishRes.results || []).map(d => ({
@@ -1162,32 +1170,57 @@ admin.get('/analytics/dish-performance', async (c) => {
       photoUrl: d.photo_url,
       available: Boolean(d.available),
       quantitySoldToday: Number(d.quantity_sold_today || 0),
-      revenueToday: Number(d.revenue_today || 0),
+      revenueToday: Math.round(Number(d.revenue_today || 0) * 100) / 100,
       allTimeQuantitySold: Number(d.all_time_quantity_sold || 0),
     }));
 
-    const totalDishesSoldToday = Number(totalSoldRes?.total_items_sold_today || 0);
-    const starDishes = dishes.filter(d => d.quantitySoldToday > 0 || d.allTimeQuantitySold > 0);
-    const highestSoldDish = starDishes.length > 0 ? starDishes[0] : (dishes[0] || null);
+    const activeSoldSum = dishes.reduce((acc, d) => acc + d.quantitySoldToday, 0);
+    const activeRevSum = Math.round(dishes.reduce((acc, d) => acc + d.revenueToday, 0) * 100) / 100;
+    const totalDishesSoldToday = Number(totalSoldRes?.total_items_sold_today ?? activeSoldSum);
+    const totalDishRevenueToday = Math.round(Number(totalSoldRes?.total_item_revenue_today ?? activeRevSum) * 100) / 100;
 
-    const lowestDishes = [...dishes].sort((a, b) => a.quantitySoldToday - b.quantitySoldToday);
-    const lowestSoldDish = lowestDishes.length > 0 ? lowestDishes[0] : null;
+    const soldTodayList = dishes.filter(d => d.quantitySoldToday > 0);
+    const highestSoldDish = soldTodayList.length > 0
+      ? soldTodayList[0]
+      : (dishes.find(d => d.allTimeQuantitySold > 0) || dishes[0] || null);
+
+    // All menu items with 0 orders today (alphabetical by category then name)
+    const notOrderedToday = dishes
+      .filter(d => d.quantitySoldToday === 0)
+      .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+
+    // Items ordered today sorted lowest volume first (for least-sold chef promotion)
+    const leastSoldToday = [...soldTodayList].sort(
+      (a, b) => a.quantitySoldToday - b.quantitySoldToday || a.revenueToday - b.revenueToday || a.name.localeCompare(b.name)
+    );
+
+    const lowestSoldDish = notOrderedToday[0] || leastSoldToday[0] || null;
 
     const catMap = {};
     dishes.forEach((d) => {
-      const c = d.category;
-      if (!catMap[c]) catMap[c] = { category: c, itemsSold: 0, revenue: 0, dishCount: 0 };
-      catMap[c].itemsSold += d.quantitySoldToday;
-      catMap[c].revenue += d.revenueToday;
-      catMap[c].dishCount += 1;
+      const cat = d.category;
+      if (!catMap[cat]) catMap[cat] = { category: cat, itemsSold: 0, revenue: 0, dishCount: 0 };
+      catMap[cat].itemsSold += d.quantitySoldToday;
+      catMap[cat].revenue = Math.round((catMap[cat].revenue + d.revenueToday) * 100) / 100;
+      catMap[cat].dishCount += 1;
     });
+
+    const underperformers = [...notOrderedToday, ...leastSoldToday];
 
     return c.json({
       totalDishesSoldToday,
+      totalDishRevenueToday,
       highestSoldDish,
       lowestSoldDish,
-      topPerformers: dishes.slice(0, 5),
-      underperformers: lowestDishes.slice(0, 5),
+      topPerformers: (soldTodayList.length > 0 ? soldTodayList : dishes).slice(0, 5),
+      notOrderedToday,
+      leastSoldToday,
+      underperformers,
+      summaryCounts: {
+        totalMenuItems: dishes.length,
+        soldTodayCount: soldTodayList.length,
+        notOrderedTodayCount: notOrderedToday.length,
+      },
       categoryBreakdown: Object.values(catMap),
     });
   } catch (err) {
@@ -1274,11 +1307,11 @@ admin.get('/analytics/operations-targets', async (c) => {
 
     const actuals = await c.env.DB.prepare(
       `SELECT 
-         COALESCE(SUM(CASE WHEN DATE(created_at) = DATE('now') THEN total ELSE 0 END), 0) AS daily_actual,
+         COALESCE(SUM(CASE WHEN ${istTodayExpr('created_at')} THEN total ELSE 0 END), 0) AS daily_actual,
          COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-7 days') THEN total ELSE 0 END), 0) AS weekly_actual,
          COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-30 days') THEN total ELSE 0 END), 0) AS monthly_actual
        FROM orders
-       WHERE restaurant_id = ?`
+       WHERE restaurant_id = ? AND status != 'CANCELLED'`
     ).bind(restaurantId).first();
 
     const dailyActual = Number(actuals?.daily_actual || 0);
@@ -1289,9 +1322,9 @@ admin.get('/analytics/operations-targets', async (c) => {
       `SELECT 
          COALESCE(payment_method, 'UPI') AS method,
          COUNT(id) AS count,
-         COALESCE(SUM(total), 0) AS amount
+         ROUND(COALESCE(SUM(total), 0), 2) AS amount
        FROM orders
-       WHERE restaurant_id = ? AND status = 'PAID'
+       WHERE restaurant_id = ? AND status = 'PAID' AND created_at >= datetime('now', '-7 days')
        GROUP BY method
        ORDER BY amount DESC`
     ).bind(restaurantId).all();
@@ -1307,14 +1340,10 @@ admin.get('/analytics/operations-targets', async (c) => {
       };
     });
 
-    const paymentBreakdown = paymentRows.length > 0 ? paymentRows.map(p => ({
+    const paymentBreakdown = paymentRows.map(p => ({
       ...p,
       percentage: totalPaid > 0 ? Math.round((p.amount / totalPaid) * 1000) / 10 : 0,
-    })) : [
-      { method: 'UPI', count: 18, amount: 4800, percentage: 68.5 },
-      { method: 'CASH', count: 6, amount: 1520, percentage: 21.7 },
-      { method: 'CARD', count: 2, amount: 680, percentage: 9.8 }
-    ];
+    }));
 
     return c.json({
       currency,

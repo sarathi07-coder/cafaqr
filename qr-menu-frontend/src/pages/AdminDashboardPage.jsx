@@ -130,6 +130,8 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
   const [todayKPI, setTodayKPI] = useState(null);
   const [peakHours, setPeakHours] = useState(null);
   const [dishPerf, setDishPerf] = useState(null);
+  const [promoTab, setPromoTab] = useState('not_ordered'); // 'not_ordered' | 'least_sold'
+  const [promoCategoryFilter, setPromoCategoryFilter] = useState('ALL');
   const [reviewsAI, setReviewsAI] = useState(null);
   const [opsTargets, setOpsTargets] = useState(null);
   const [isEditingTargets, setIsEditingTargets] = useState(false);
@@ -1461,16 +1463,21 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
                 
                 {/* Food Quantity & Performance Spotlight */}
                 <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <h3 className="font-serif font-bold text-base text-stone-900 flex items-center gap-2">
                         <Utensils className="w-4 h-4 text-amber-600" />
                         <span>Food Quantity & Dish Performance</span>
                       </h3>
                       <p className="text-xs text-stone-500">
-                        Total {dishPerf?.totalDishesSoldToday || 0} food items prepared today
+                        Total <strong>{dishPerf?.totalDishesSoldToday || 0}</strong> food items prepared today &bull; <strong>₹{parseFloat(dishPerf?.totalDishRevenueToday || 0).toFixed(2)}</strong> dish sales
                       </p>
                     </div>
+                    {dishPerf?.summaryCounts && (
+                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-xl bg-stone-100 text-stone-700 self-start sm:self-auto">
+                        {dishPerf.summaryCounts.soldTodayCount}/{dishPerf.summaryCounts.totalMenuItems} dishes ordered today
+                      </span>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
@@ -1484,10 +1491,10 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
                       </div>
                       <div>
                         <h4 className="font-serif font-bold text-sm text-stone-900">
-                          {dishPerf?.highestSoldDish?.name || 'Chicken Briyani'}
+                          {dishPerf?.highestSoldDish?.name || 'No orders today'}
                         </h4>
                         <p className="text-xs text-stone-600">
-                          Category: {dishPerf?.highestSoldDish?.category || 'Briyani'} &bull; ₹{parseFloat(dishPerf?.highestSoldDish?.price || 0).toFixed(2)}
+                          Category: {dishPerf?.highestSoldDish?.category || '-'} &bull; ₹{parseFloat(dishPerf?.highestSoldDish?.price || 0).toFixed(2)}
                         </p>
                       </div>
                       <div className="pt-2 border-t border-amber-200/60 flex items-baseline justify-between text-xs">
@@ -1500,28 +1507,31 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
                       </div>
                     </div>
 
-                    {/* Lowest Sold Dish (Action Item) */}
-                    <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-stone-700 bg-stone-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                          <TrendingDown className="w-3 h-3 text-stone-500" />
-                          ⚠️ Action Item (Lowest Sold)
+                    {/* Lowest Sold & Unordered Spotlight */}
+                    <div className="p-4 rounded-2xl bg-rose-50/50 border border-rose-200 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-rose-900 bg-rose-200/70 px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <TrendingDown className="w-3 h-3 text-rose-700" />
+                          ⚠️ Needs Chef Promotion
+                        </span>
+                        <span className="text-[11px] font-black text-rose-700">
+                          {(dishPerf?.notOrderedToday || []).length} zero today
                         </span>
                       </div>
                       <div>
                         <h4 className="font-serif font-bold text-sm text-stone-900">
-                          {dishPerf?.lowestSoldDish?.name || 'Mint Mojito'}
+                          {dishPerf?.lowestSoldDish?.name || 'All items ordered today'}
                         </h4>
                         <p className="text-xs text-stone-600">
-                          Category: {dishPerf?.lowestSoldDish?.category || 'Mojito'} &bull; ₹{parseFloat(dishPerf?.lowestSoldDish?.price || 0).toFixed(2)}
+                          Category: {dishPerf?.lowestSoldDish?.category || '-'} &bull; ₹{parseFloat(dishPerf?.lowestSoldDish?.price || 0).toFixed(2)}
                         </p>
                       </div>
-                      <div className="pt-2 border-t border-stone-200 flex items-center justify-between text-xs">
-                        <span className="text-stone-500">
+                      <div className="pt-2 border-t border-rose-200/70 flex items-center justify-between text-xs">
+                        <span className="text-stone-600">
                           <strong>{dishPerf?.lowestSoldDish?.quantitySoldToday || 0} ordered</strong> today
                         </span>
-                        <span className="text-[11px] font-semibold text-amber-700">
-                          Needs Chef Promotion
+                        <span className="text-[11px] font-semibold text-amber-800">
+                          See full list below &darr;
                         </span>
                       </div>
                     </div>
@@ -1546,21 +1556,127 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
                           <div>
                             <p className="text-xs font-bold text-stone-900">{item.name}</p>
                             <p className="text-[11px] text-stone-500">
-                              {item.category || 'Mains'} &bull; ₹{parseFloat(item.price || 0).toFixed(2)}
+                              {item.category || 'Mains'} &bull; Menu ₹{parseFloat(item.price || 0).toFixed(2)}
                             </p>
                           </div>
                         </div>
                         <div className="text-right">
                           <span className="text-xs font-bold text-stone-900">
-                            {item.quantitySoldToday || item.total_sold || 0} ordered
+                            {item.quantitySoldToday ?? item.count ?? item.total_sold ?? 0} ordered
                           </span>
                           <p className="text-[11px] text-emerald-600 font-semibold">
-                            ₹{parseFloat(item.revenueToday || item.revenue || 0).toFixed(2)}
+                            ₹{parseFloat(item.revenueToday ?? item.total_revenue ?? item.revenue ?? 0).toFixed(2)}
                           </p>
                         </div>
                       </div>
                     ))}
                   </div>
+
+                  {/* Full Chef Promotion Watchlist: All Not Ordered Today (0 Sold) + Least Sold Today */}
+                  {(() => {
+                    const notOrderedList = Array.isArray(dishPerf?.notOrderedToday) ? dishPerf.notOrderedToday : [];
+                    const leastSoldList = Array.isArray(dishPerf?.leastSoldToday) ? dishPerf.leastSoldToday : [];
+                    const activeList = promoTab === 'not_ordered' ? notOrderedList : leastSoldList;
+                    const promoCategories = ['ALL', ...Array.from(new Set(activeList.map((d) => d.category))).sort()];
+                    const filteredPromo = promoCategoryFilter === 'ALL'
+                      ? activeList
+                      : activeList.filter((d) => d.category === promoCategoryFilter);
+
+                    return (
+                      <div className="pt-3 border-t border-stone-200 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <h4 className="text-xs font-black uppercase tracking-wider text-rose-800 flex items-center gap-1.5">
+                              <Flame className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Chef Promotion Watchlist (Full Menu)</span>
+                            </h4>
+                            <p className="text-[11px] text-stone-500">
+                              Every dish with 0 orders today and lowest-selling items needing promotion
+                            </p>
+                          </div>
+                          <select
+                            value={promoCategoryFilter}
+                            onChange={(e) => setPromoCategoryFilter(e.target.value)}
+                            className="text-xs font-semibold bg-stone-100 border border-stone-200 rounded-xl px-2.5 py-1.5 text-stone-800"
+                          >
+                            {promoCategories.map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat === 'ALL' ? `All Categories (${activeList.length})` : cat}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setPromoTab('not_ordered'); setPromoCategoryFilter('ALL'); }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                              promoTab === 'not_ordered'
+                                ? 'bg-rose-600 text-white shadow-xs'
+                                : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                            }`}
+                          >
+                            Not Ordered Today ({notOrderedList.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setPromoTab('least_sold'); setPromoCategoryFilter('ALL'); }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                              promoTab === 'least_sold'
+                                ? 'bg-amber-500 text-stone-950 shadow-xs'
+                                : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                            }`}
+                          >
+                            Least Sold Today ({leastSoldList.length})
+                          </button>
+                        </div>
+
+                        {filteredPromo.length === 0 ? (
+                          <p className="text-xs text-stone-400 italic py-4 text-center bg-stone-50 rounded-2xl">
+                            {promoTab === 'not_ordered'
+                              ? 'Every dish in this filter was ordered at least once today!'
+                              : 'No dishes sold yet in this filter today.'}
+                          </p>
+                        ) : (
+                          <div className="max-h-72 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {filteredPromo.map((item) => (
+                              <div
+                                key={item.id}
+                                className={`flex items-center justify-between p-2.5 rounded-xl border text-xs ${
+                                  item.quantitySoldToday === 0
+                                    ? 'bg-rose-50/40 border-rose-200/70'
+                                    : 'bg-amber-50/40 border-amber-200/70'
+                                }`}
+                              >
+                                <div className="min-w-0 pr-2">
+                                  <p className="font-bold text-stone-900 truncate">{item.name}</p>
+                                  <p className="text-[11px] text-stone-500 truncate">
+                                    {item.category} &bull; ₹{parseFloat(item.price || 0).toFixed(0)}
+                                    {!item.available ? ' • Out of stock' : ''}
+                                  </p>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <span className={`px-2 py-0.5 rounded-md font-black text-[10px] ${
+                                    item.quantitySoldToday === 0
+                                      ? 'bg-rose-100 text-rose-800'
+                                      : 'bg-amber-200/80 text-amber-900'
+                                  }`}>
+                                    {item.quantitySoldToday} sold today
+                                  </span>
+                                  {item.quantitySoldToday > 0 && (
+                                    <p className="text-[10px] text-emerald-700 font-bold mt-0.5">
+                                      ₹{parseFloat(item.revenueToday || 0).toFixed(2)}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1624,22 +1740,26 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
                     <span className="text-[11px] text-stone-400">Past 7 days</span>
                   </div>
                   <div className="space-y-2 pt-1">
-                    {(Array.isArray(opsTargets?.operations?.paymentBreakdown) ? opsTargets.operations.paymentBreakdown : []).map((p, idx) => (
-                      <div key={idx} className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="font-bold text-stone-700">{p.method}</span>
-                          <span className="text-stone-500 font-medium">₹{parseFloat(p.amount).toFixed(0)} ({p.percentage}%)</span>
+                    {(Array.isArray(opsTargets?.operations?.paymentBreakdown) ? opsTargets.operations.paymentBreakdown : []).length === 0 ? (
+                      <p className="text-xs text-stone-400 italic py-2 text-center">No settled payments in past 7 days.</p>
+                    ) : (
+                      (Array.isArray(opsTargets?.operations?.paymentBreakdown) ? opsTargets.operations.paymentBreakdown : []).map((p, idx) => (
+                        <div key={idx} className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-stone-700">{p.method}</span>
+                            <span className="text-stone-500 font-medium">₹{parseFloat(p.amount).toFixed(0)} ({p.percentage}%)</span>
+                          </div>
+                          <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                p.method === 'UPI' ? 'bg-emerald-500' : p.method === 'CASH' ? 'bg-amber-500' : 'bg-blue-500'
+                              }`}
+                              style={{ width: `${p.percentage}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${
-                              p.method === 'UPI' ? 'bg-emerald-500' : p.method === 'CASH' ? 'bg-amber-500' : 'bg-blue-500'
-                            }`}
-                            style={{ width: `${p.percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
 
