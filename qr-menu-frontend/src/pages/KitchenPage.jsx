@@ -450,7 +450,7 @@ export default function KitchenPage() {
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600" />
 
             <div className="flex flex-col items-center text-center mb-6">
-              <KrishLogo size="lg" showHat={true} subtitle="Cafe & Restaurant" />
+              <KrishLogo size="lg" showMascot={true} showHat={true} subtitle="Cafe & Restaurant" />
               <span className="mt-3 text-[11px] font-black tracking-widest uppercase text-amber-400 bg-amber-500/15 border border-amber-500/30 px-3 py-1 rounded-full">
                 Kitchen Display Lock
               </span>

@@ -172,6 +172,8 @@ export default function AdminDashboardPage() {
   const [upiCopied, setUpiCopied] = useState(false);
   const [testUpiAmount, setTestUpiAmount] = useState('150');
   const [activeReceipt, setActiveReceipt] = useState(null);
+  const [barcodeLookup, setBarcodeLookup] = useState('');
+  const [isLookingUpBarcode, setIsLookingUpBarcode] = useState(false);
 
   // Manager Security Passkey State
   const [isPasskeyModalOpen, setIsPasskeyModalOpen] = useState(false);
@@ -795,12 +797,13 @@ export default function AdminDashboardPage() {
     total,
     paymentMethod = 'CASH',
     statusText = 'PAID',
+    isCombinedTable = false,
   }) => ({
     restaurantName: upiConfig.restaurantName || 'KRISH CAFE AND RESTAURANT',
-    addressLine1: upiConfig.address ? upiConfig.address.split(',')[0] : 'NEAR RATHINAM CLG, EACHANARI',
+    addressLine1: upiConfig.address ? upiConfig.address.split(',')[0] : 'RATHINAM COLLEGE FRONT GATE',
     addressLine2: upiConfig.address && upiConfig.address.includes(',')
       ? upiConfig.address.split(',').slice(1).join(',').trim()
-      : 'COIMBATORE - 641021',
+      : 'EACHANARI, COIMBATORE - 641021',
     phone: upiConfig.phone || '8760633322',
     orderId,
     receiptNumber: receiptNumber || orderId,
@@ -814,8 +817,46 @@ export default function AdminDashboardPage() {
     total,
     paymentMethod,
     statusText,
+    isCombinedTable,
     paidAt: new Date().toISOString(),
   });
+
+  const handleBarcodeLookup = async (e) => {
+    e.preventDefault();
+    const cleaned = barcodeLookup.trim();
+    if (!cleaned) return;
+    setIsLookingUpBarcode(true);
+    try {
+      const data = await api.getReceiptByCode(cleaned);
+      setActiveReceipt({
+        restaurantName: data.restaurantName,
+        addressLine1: data.address ? data.address.split(',')[0] : 'RATHINAM COLLEGE FRONT GATE',
+        addressLine2: data.address && data.address.includes(',')
+          ? data.address.split(',').slice(1).join(',').trim()
+          : 'EACHANARI, COIMBATORE - 641021',
+        phone: data.phone,
+        orderId: data.orderId,
+        receiptNumber: data.receiptNumber,
+        barcodeCode: data.barcodeCode,
+        tableNumber: data.tableNumber,
+        customerName: data.customerName,
+        guestsCount: data.guestsCount || 1,
+        items: data.items || [],
+        subtotal: data.subtotal,
+        discountAmount: data.discountAmount || 0,
+        taxAmount: data.taxAmount,
+        total: data.total,
+        paymentMethod: data.paymentMethod,
+        statusText: data.status,
+        paidAt: data.paidAt,
+      });
+      setBarcodeLookup('');
+    } catch (err) {
+      alert(err.message || 'No bill found for this barcode');
+    } finally {
+      setIsLookingUpBarcode(false);
+    }
+  };
 
   // Settle bill (flat stream)
   const handleConfirmSettle = async () => {
@@ -909,6 +950,7 @@ export default function AdminDashboardPage() {
         total: snapshotTable.combinedBill || 0,
         paymentMethod: settleMethod,
         statusText: 'PAID',
+        isCombinedTable: true,
       }));
       setToastMessage(`Table #${snapshotTable.tableNumber} session ended via ${settleMethod}! (${res.settledOrdersCount} diner sessions)`);
       setSettleTableTarget(null);
@@ -958,7 +1000,7 @@ export default function AdminDashboardPage() {
       {/* Admin Top Navigation */}
       <header className="h-16 bg-[#120F0B]/95 backdrop-blur-xl border-b border-white/10 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <KrishLogo size="sm" showHat={true} showSubtitle={false} />
+          <KrishLogo size="sm" showMascot={true} showHat={true} showSubtitle={false} />
           <div className="hidden sm:block border-l border-white/15 pl-3">
             <h1 className="font-serif font-black text-sm text-white leading-tight flex items-center gap-2">
               <span>KRISH Cafe & Restaurant</span>
@@ -1553,28 +1595,48 @@ export default function AdminDashboardPage() {
                 </p>
               </div>
 
-              {/* View Mode Toggle */}
-              <div className="flex items-center bg-stone-100 p-1 rounded-xl self-start sm:self-auto border border-stone-200">
-                <button
-                  onClick={() => setOrdersViewMode('grouped')}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
-                    ordersViewMode === 'grouped'
-                      ? 'bg-white text-stone-950 shadow-xs'
-                      : 'text-stone-500 hover:text-stone-900'
-                  }`}
-                >
-                  🪑 Grouped by Table
-                </button>
-                <button
-                  onClick={() => setOrdersViewMode('stream')}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
-                    ordersViewMode === 'stream'
-                      ? 'bg-white text-stone-950 shadow-xs'
-                      : 'text-stone-500 hover:text-stone-900'
-                  }`}
-                >
-                  📋 Flat Order Stream
-                </button>
+              <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+                {/* Barcode Scan / Bill Lookup */}
+                <form onSubmit={handleBarcodeLookup} className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={barcodeLookup}
+                    onChange={(e) => setBarcodeLookup(e.target.value)}
+                    placeholder="Scan bill barcode (KR-...)"
+                    className="w-44 px-3 py-1.5 rounded-xl bg-stone-50 border border-stone-300 text-xs font-mono text-stone-900 placeholder-stone-400 focus:outline-hidden focus:border-amber-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isLookingUpBarcode}
+                    className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold transition cursor-pointer"
+                  >
+                    {isLookingUpBarcode ? '...' : 'Scan Bill'}
+                  </button>
+                </form>
+
+                {/* View Mode Toggle */}
+                <div className="flex items-center bg-stone-100 p-1 rounded-xl border border-stone-200">
+                  <button
+                    onClick={() => setOrdersViewMode('grouped')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                      ordersViewMode === 'grouped'
+                        ? 'bg-white text-stone-950 shadow-xs'
+                        : 'text-stone-500 hover:text-stone-900'
+                    }`}
+                  >
+                    🪑 Grouped by Table
+                  </button>
+                  <button
+                    onClick={() => setOrdersViewMode('stream')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                      ordersViewMode === 'stream'
+                        ? 'bg-white text-stone-950 shadow-xs'
+                        : 'text-stone-500 hover:text-stone-900'
+                    }`}
+                  >
+                    📋 Flat Order Stream
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1649,6 +1711,7 @@ export default function AdminDashboardPage() {
                                 total: table.combinedBill || 0,
                                 paymentMethod: 'PENDING / PREVIEW',
                                 statusText: 'UNPAID PREVIEW',
+                                isCombinedTable: true,
                               }));
                             }}
                             className="px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 font-bold text-xs rounded-xl transition active:scale-95 cursor-pointer flex items-center gap-1.5 whitespace-nowrap"

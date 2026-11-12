@@ -43,7 +43,7 @@ export default function AdminLoginPage() {
 
           {/* Logo & Header */}
           <div className="flex flex-col items-center text-center mb-6">
-            <KrishLogo size="lg" showHat={true} subtitle="Cafe & Restaurant" />
+            <KrishLogo size="lg" showMascot={true} showHat={true} subtitle="Cafe & Restaurant" />
             <span className="mt-3 text-[11px] font-black tracking-widest uppercase text-amber-400 bg-amber-500/15 border border-amber-500/30 px-3 py-1 rounded-full shadow-inner">
               Manager & Cashier Portal
             </span>

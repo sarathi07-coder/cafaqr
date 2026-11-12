@@ -569,6 +569,14 @@ export const api = {
     return data;
   },
 
+  async getReceiptByCode(code) {
+    const clean = encodeURIComponent(String(code || '').trim());
+    const res = await fetch(`${API_BASE}/order/receipt/${clean}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Receipt not found');
+    return data;
+  },
+
   async resetAdminUpiPasskey(restaurantId, token, adminPassword, newPasskey) {
     const res = await fetch(`${API_BASE}/admin/upi/reset-passkey`, {
       method: 'POST',

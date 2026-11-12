@@ -1093,4 +1093,120 @@ order.get('/:id/split', async (c) => {
   }
 });
 
+// GET /api/order/receipt/:code (Public Digital Bill Lookup by Barcode / Receipt Code / Order UUID)
+order.get('/receipt/:code', async (c) => {
+  const rawCode = decodeURIComponent(c.req.param('code') || '').trim();
+  if (!rawCode) {
+    return c.json({ error: 'Receipt code is required' }, 400);
+  }
+
+  try {
+    const cleaned = rawCode.replace(/^#/, '').trim();
+    const isCombinedTableCode = /^KT[-_]?/i.test(cleaned);
+    const idPrefix = cleaned
+      .replace(/^(KR|KT)[-_]?/i, '')
+      .toLowerCase();
+
+    if (!idPrefix || idPrefix.length < 4) {
+      return c.json({ error: 'Invalid receipt code format' }, 400);
+    }
+
+    const anchor = await c.env.DB.prepare(
+      `SELECT o.*, t.number AS table_number, r.name AS restaurant_name, r.address AS restaurant_address, r.phone AS restaurant_phone,
+              c.name AS customer_name, c.phone AS customer_phone
+       FROM orders o
+       LEFT JOIN tables t ON o.table_id = t.id
+       LEFT JOIN restaurants r ON o.restaurant_id = r.id
+       LEFT JOIN customers c ON o.customer_id = c.id
+       WHERE LOWER(o.id) = ? OR LOWER(o.id) LIKE ?
+       ORDER BY o.created_at DESC
+       LIMIT 1`
+    ).bind(cleaned.toLowerCase(), `${idPrefix}%`).first();
+
+    if (!anchor) {
+      return c.json({ error: 'Receipt / Bill not found' }, 404);
+    }
+
+    let targetOrders = [anchor];
+
+    // If combined table receipt (KT-<id6>) or explicit table scope, gather companion orders from the same table batch
+    if (isCombinedTableCode && anchor.table_id) {
+      const companions = await c.env.DB.prepare(
+        `SELECT o.*, c.name AS customer_name
+         FROM orders o
+         LEFT JOIN customers c ON o.customer_id = c.id
+         WHERE o.table_id = ?
+           AND o.status = ?
+           AND ABS(strftime('%s', COALESCE(o.updated_at, o.created_at)) - strftime('%s', COALESCE(?, o.created_at))) <= 300
+         ORDER BY o.created_at ASC`
+      ).bind(anchor.table_id, anchor.status, anchor.updated_at || anchor.created_at).all();
+
+      if (companions.results && companions.results.length > 0) {
+        targetOrders = companions.results;
+      }
+    }
+
+    const items = [];
+    let subtotal = 0;
+    let discountAmount = 0;
+    let taxAmount = 0;
+    let total = 0;
+    const guestNames = [];
+
+    for (const ord of targetOrders) {
+      if (ord.customer_name && !guestNames.includes(ord.customer_name)) {
+        guestNames.push(ord.customer_name);
+      }
+      subtotal += Number(ord.subtotal || 0);
+      discountAmount += Number(ord.discount_amount || 0);
+      taxAmount += Number(ord.tax_amount || 0);
+      total += Number(ord.total || 0);
+
+      const itemsRes = await c.env.DB.prepare(
+        `SELECT oi.id, oi.quantity, oi.price_at_order, mi.name AS item_name, mi.name, mi.category
+         FROM order_items oi
+         JOIN menu_items mi ON oi.menu_item_id = mi.id
+         WHERE oi.order_id = ?`
+      ).bind(ord.id).all();
+
+      for (const it of (itemsRes.results || [])) {
+        const qty = Number(it.quantity || 1);
+        const unitPrice = Number(it.price_at_order || 0);
+        items.push({
+          name: it.item_name || it.name || 'Item',
+          quantity: qty,
+          price: unitPrice,
+          line_total: Number((unitPrice * qty).toFixed(2)),
+        });
+      }
+    }
+
+    const barcodePrefix = isCombinedTableCode ? 'KT' : 'KR';
+    const barcodeCode = `${barcodePrefix}-${String(anchor.id).slice(0, 6).toUpperCase()}`;
+
+    return c.json({
+      orderId: anchor.id,
+      receiptNumber: `#${barcodeCode}`,
+      barcodeCode,
+      restaurantName: anchor.restaurant_name || 'KRISH Cafe & Restaurant',
+      address: anchor.restaurant_address || 'Rathinam College Front Gate, Eachanari, Coimbatore - 641021',
+      phone: anchor.restaurant_phone || '8760633322',
+      tableNumber: anchor.table_number || 1,
+      customerName: guestNames.join(', ') || anchor.customer_name || 'Guest',
+      guestsCount: targetOrders.length || 1,
+      paymentMethod: anchor.payment_method || (anchor.status === 'PAID' ? 'CASH' : 'UNPAID'),
+      status: anchor.status || 'PENDING',
+      paidAt: toUtcIso(anchor.updated_at || anchor.created_at),
+      subtotal: Number(subtotal.toFixed(2)),
+      discountAmount: Number(discountAmount.toFixed(2)),
+      taxAmount: Number(taxAmount.toFixed(2)),
+      total: Number(total.toFixed(2)),
+      items,
+    });
+  } catch (err) {
+    console.error('Receipt lookup error:', err);
+    return c.json({ error: 'Database error' }, 500);
+  }
+});
+
 export default order;

@@ -475,7 +475,7 @@ export default function CustomerMenuPage() {
           {/* Brand Identity & Taglines */}
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <KrishLogo size="md" showTagline={false} />
+              <KrishLogo size="md" showMascot={true} showTagline={false} />
               <div className="border-l border-white/15 pl-3">
                 <span className="font-script text-base text-amber-300 block leading-tight">
                   Taste the Happiness

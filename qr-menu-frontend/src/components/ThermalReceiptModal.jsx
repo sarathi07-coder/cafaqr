@@ -1,44 +1,8 @@
 import React, { useMemo } from 'react';
-import { Printer, X, CheckCircle2 } from 'lucide-react';
-
-/**
- * Generates deterministic high-contrast monochrome barcode bar widths from a seed string
- * so each thermal receipt has a crisp scannable-style barcode SVG matching printed POS bills.
- */
-function buildBarcodeBars(seedText = '000000000000') {
-  const digits = String(seedText).replace(/[^A-Za-z0-9]/g, '') || '123456789012';
-  const bars = [];
-  let x = 2;
-
-  // Start guard bars
-  bars.push({ x, w: 2 }); x += 3;
-  bars.push({ x, w: 1 }); x += 2;
-  bars.push({ x, w: 2 }); x += 4;
-
-  for (let i = 0; i < digits.length; i += 1) {
-    const code = digits.charCodeAt(i);
-    const pattern = [
-      (code % 3) + 1,
-      ((code >> 1) % 2) + 1,
-      ((code >> 2) % 3) + 1,
-      ((code >> 3) % 2) + 1,
-    ];
-    for (let j = 0; j < pattern.length; j += 1) {
-      const width = pattern[j];
-      if (j % 2 === 0) {
-        bars.push({ x, w: width });
-      }
-      x += width + 1;
-    }
-  }
-
-  // Stop guard bars
-  bars.push({ x, w: 2 }); x += 3;
-  bars.push({ x, w: 1 }); x += 2;
-  bars.push({ x, w: 2 }); x += 2;
-
-  return { bars, totalWidth: Math.max(x + 2, 160) };
-}
+import { Printer, X, CheckCircle2, ExternalLink, QrCode } from 'lucide-react';
+import qrcode from 'qrcode-generator';
+import { encodeCode128B } from '../utils/barcode';
+import SafeQRCode from './SafeQRCode';
 
 function formatReceiptDateTime(isoOrDate) {
   const d = isoOrDate ? new Date(isoOrDate) : new Date();
@@ -51,7 +15,6 @@ function formatReceiptDateTime(isoOrDate) {
   return {
     fullDateTime: `${dd}/${mm}/${yyyy} ${hh}:${min}`,
     timeOnly: `${hh}:${min}`,
-    compactDate: `${dd}${mm}${yyyy}`,
   };
 }
 
@@ -63,10 +26,22 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+function createQrSvgMarkup(url) {
+  if (!url) return '';
+  try {
+    const qr = qrcode(0, 'M');
+    qr.addData(String(url));
+    qr.make();
+    return qr.createSvgTag({ scalable: true, margin: 1 });
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Thermal POS Receipt preview & direct printer modal.
- * Prints an isolated 80mm monochrome thermal receipt through a hidden iframe so connected
- * USB/Bluetooth/system printers receive clean receipt formatting without dashboard chrome.
+ * Encodes a genuine ISO/IEC 15417 Code-128B barcode plus a scannable digital bill QR
+ * so barcode/camera scans display full itemized bill details on /bill/:code or in Admin.
  */
 export default function ThermalReceiptModal({ receipt, onClose }) {
   const normalized = useMemo(() => {
@@ -94,9 +69,13 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
       : Math.max(0, total - taxAmount);
     const discountAmount = Number(receipt.discountAmount || 0);
 
+    const rawId = String(receipt.orderId || receipt.receiptNumber || Date.now()).replace(/^#/, '');
+    const idPrefix6 = rawId.replace(/^(KR|KT)[-_]?/i, '').slice(0, 6).toUpperCase();
+    const barcodePrefix = receipt.isCombinedTable ? 'KT' : 'KR';
+    const barcodeCode = receipt.barcodeCode || `${barcodePrefix}-${idPrefix6}`;
+
     const refDigits = String(
       receipt.refNumber ||
-      receipt.receiptNumber ||
       receipt.orderId ||
       Date.now()
     )
@@ -104,23 +83,29 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
       .slice(-8)
       .padStart(8, '4');
 
-    const { fullDateTime, timeOnly, compactDate } = formatReceiptDateTime(receipt.paidAt);
-    const shortReceiptNo = `#KR-${String(receipt.receiptNumber || receipt.orderId || refDigits).slice(0, 6).toUpperCase()}`;
-    const barcodeValue = `${refDigits.slice(0, 6)}${compactDate.slice(0, 6)}`;
-    const totalQty = items.reduce((sum, it) => sum + it.qty, 0);
+    const { fullDateTime, timeOnly } = formatReceiptDateTime(receipt.paidAt);
+    const shortReceiptNo = `#${barcodeCode}`;
+
+    const origin = typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'https://cafaqr.p7404467.workers.dev';
+    const billUrl = `${origin}/bill/${encodeURIComponent(barcodeCode)}`;
 
     return {
       restaurantName: (receipt.restaurantName || 'KRISH CAFE AND RESTAURANT').toUpperCase(),
-      addressLine1: (receipt.addressLine1 || 'NEAR RATHINAM CLG, EACHANARI').toUpperCase(),
-      addressLine2: (receipt.addressLine2 || 'COIMBATORE - 641021').toUpperCase(),
+      addressLine1: (receipt.addressLine1 || 'RATHINAM COLLEGE FRONT GATE').toUpperCase(),
+      addressLine2: (receipt.addressLine2 || 'EACHANARI, COIMBATORE - 641021').toUpperCase(),
       phone: receipt.phone || '8760633322',
       fullDateTime,
       timeOnly,
       shortReceiptNo,
+      barcodeCode,
+      billUrl,
+      logoSrc: `${origin}/krish_logo.png`,
+      mascotSrc: `${origin}/krish_chef_mascot.png`,
       tableDisplay: String(receipt.tableNumber || '1').padStart(2, '0'),
       guestName: String(receipt.customerName || 'WALK-IN GUEST').toUpperCase(),
       guestsCount: receipt.guestsCount || 1,
-      totalQty,
       items,
       subtotal,
       discountAmount,
@@ -129,13 +114,16 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
       paymentMethod: String(receipt.paymentMethod || 'CASH').toUpperCase(),
       refCode: `REF: ${refDigits}`,
       statusText: receipt.statusText || 'PAID',
-      barcodeValue,
     };
   }, [receipt]);
 
   const barcode = useMemo(() => {
-    return buildBarcodeBars(normalized?.barcodeValue || '254720250930');
-  }, [normalized?.barcodeValue]);
+    return encodeCode128B(normalized?.barcodeCode || 'KR-000000');
+  }, [normalized?.barcodeCode]);
+
+  const qrSvgMarkup = useMemo(() => {
+    return createQrSvgMarkup(normalized?.billUrl);
+  }, [normalized?.billUrl]);
 
   if (!normalized) return null;
 
@@ -144,7 +132,7 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
       .map(
         (it) => `
           <div class="row item-row">
-            <span class="left">${it.qty > 1 ? `${it.qty}X ` : '1X '}${escapeHtml(it.name)}</span>
+            <span class="left">${it.qty}X ${escapeHtml(it.name)}</span>
             <span class="right">₹${it.lineTotal.toFixed(2)}</span>
           </div>`
       )
@@ -152,7 +140,7 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
 
     const barcodeRectsHtml = barcode.bars
       .map(
-        (b) => `<rect x="${b.x}" y="0" width="${b.w}" height="42" fill="#000000" />`
+        (b) => `<rect x="${b.x}" y="0" width="${b.w}" height="46" fill="#000000" />`
       )
       .join('');
 
@@ -166,7 +154,7 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 8px 10px;
+      padding: 8px 10px 14px;
       background: #ffffff;
       color: #111111;
       font-family: "Courier New", Courier, monospace;
@@ -175,21 +163,38 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
       width: 72mm;
     }
     .center { text-align: center; }
+    .logo-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .logo-mascot {
+      height: 36px;
+      width: auto;
+      object-fit: contain;
+    }
+    .logo-wordmark {
+      height: 44px;
+      width: auto;
+      object-fit: contain;
+    }
     .brand {
-      font-size: 17px;
+      font-size: 15px;
       font-weight: 700;
-      letter-spacing: 0.6px;
+      letter-spacing: 0.5px;
       line-height: 1.2;
-      margin: 6px 0 4px;
+      margin: 4px 0 3px;
     }
     .meta {
       font-size: 10.5px;
-      line-height: 1.4;
+      line-height: 1.38;
       color: #222222;
     }
     .divider {
       border-top: 1.5px solid #111111;
-      margin: 10px 0;
+      margin: 9px 0;
     }
     .row {
       display: flex;
@@ -208,29 +213,52 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
     }
     .footer-note {
       text-align: center;
-      font-size: 11px;
+      font-size: 10.5px;
       margin-top: 10px;
     }
-    .barcode-wrap {
+    .scan-box {
       text-align: center;
-      margin-top: 8px;
+      margin-top: 10px;
+      padding: 6px 4px;
+      background: #ffffff;
+    }
+    .qr-box {
+      width: 76px;
+      height: 76px;
+      margin: 4px auto 6px;
+    }
+    .qr-box svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .barcode-svg {
+      display: block;
+      width: 100%;
+      max-width: 230px;
+      height: 48px;
+      margin: 4px auto 0;
     }
     .barcode-num {
       font-size: 11px;
-      letter-spacing: 1px;
+      font-weight: 700;
+      letter-spacing: 1.4px;
       margin-top: 3px;
+    }
+    .scan-caption {
+      font-size: 9px;
+      letter-spacing: 0.4px;
+      margin-top: 2px;
+      color: #333333;
     }
   </style>
 </head>
 <body>
   <div class="center">
-    <svg width="34" height="36" viewBox="0 0 36 36" fill="none" stroke="#111111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M10 4v9a3 3 0 0 0 3 3v16" />
-      <path d="M14 4v9a3 3 0 0 1-3 3" />
-      <path d="M12 4v12" />
-      <path d="M25 4v28" />
-      <path d="M25 4c3 0 4 4 4 10h-4" />
-    </svg>
+    <div class="logo-row">
+      <img class="logo-mascot" src="${escapeHtml(normalized.mascotSrc)}" alt="Chef" />
+      <img class="logo-wordmark" src="${escapeHtml(normalized.logoSrc)}" alt="KRISH Cafe &amp; Restaurant" />
+    </div>
     <div class="brand">${escapeHtml(normalized.restaurantName)}</div>
     <div class="meta">
       <div>${escapeHtml(normalized.addressLine1)}</div>
@@ -255,7 +283,7 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
 
   ${itemRowsHtml}
 
-  <div style="margin-top:10px;">
+  <div style="margin-top:9px;">
     <div class="row">
       <span class="left">SUBTOTAL:</span>
       <span class="right">₹${normalized.subtotal.toFixed(2)}</span>
@@ -295,15 +323,18 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
   </div>
 
   <div class="footer-note">
-    <div>THANK YOU FOR DINING WITH US!</div>
+    <div><strong>THANK YOU FOR DINING WITH US!</strong></div>
     <div>PLEASE COME AGAIN!</div>
   </div>
 
-  <div class="barcode-wrap">
-    <svg width="190" height="44" viewBox="0 0 ${barcode.totalWidth} 44" xmlns="http://www.w3.org/2000/svg">
+  <div class="scan-box">
+    ${qrSvgMarkup ? `<div class="qr-box">${qrSvgMarkup}</div>` : ''}
+    <svg class="barcode-svg" viewBox="0 0 ${barcode.totalWidth} 46" preserveAspectRatio="none" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="${barcode.totalWidth}" height="46" fill="#ffffff" />
       ${barcodeRectsHtml}
     </svg>
-    <div class="barcode-num">${escapeHtml(normalized.barcodeValue)}</div>
+    <div class="barcode-num">${escapeHtml(normalized.barcodeCode)}</div>
+    <div class="scan-caption">SCAN QR OR BARCODE TO VIEW BILL INFO</div>
   </div>
 </body>
 </html>`;
@@ -339,7 +370,7 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
         } catch {
           window.print();
         }
-      }, 200);
+      }, 300);
     } catch {
       window.print();
     }
@@ -365,36 +396,30 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
           </button>
         </div>
 
-        {/* Thermal Paper Preview Sheet */}
-        <div className="p-5 bg-stone-200 max-h-[68vh] overflow-y-auto flex justify-center">
+        {/* Thermal Paper Preview Sheet (items-start + h-fit ensures bottom barcode never overflows card) */}
+        <div className="p-5 bg-stone-200 max-h-[68vh] overflow-y-auto flex justify-center items-start">
           <div
-            className="w-full max-w-[300px] bg-[#FAF9F6] text-stone-950 px-5 py-6 shadow-lg border border-stone-300"
+            className="w-full max-w-[300px] shrink-0 h-fit bg-[#FAF9F6] text-stone-950 px-5 pt-5 pb-7 shadow-lg border border-stone-300"
             style={{ fontFamily: '"Courier New", Courier, monospace' }}
           >
-            {/* Cutlery Icon + Header */}
+            {/* Brand Logo + Header */}
             <div className="text-center">
-              <div className="flex justify-center mb-1.5">
-                <svg
-                  width="32"
-                  height="34"
-                  viewBox="0 0 36 36"
-                  fill="none"
-                  stroke="#111111"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M10 4v9a3 3 0 0 0 3 3v16" />
-                  <path d="M14 4v9a3 3 0 0 1-3 3" />
-                  <path d="M12 4v12" />
-                  <path d="M25 4v28" />
-                  <path d="M25 4c3 0 4 4 4 10h-4" />
-                </svg>
+              <div className="flex items-center justify-center gap-2 mb-1.5">
+                <img
+                  src="/krish_chef_mascot.png"
+                  alt="KRISH Chef"
+                  className="h-11 w-auto object-contain"
+                />
+                <img
+                  src="/krish_logo.png"
+                  alt="KRISH Cafe & Restaurant"
+                  className="h-12 w-auto object-contain"
+                />
               </div>
-              <h2 className="text-[17px] font-bold tracking-wide leading-tight uppercase">
+              <h2 className="text-[15px] font-bold tracking-wide leading-tight uppercase">
                 {normalized.restaurantName}
               </h2>
-              <div className="text-[10px] text-stone-700 leading-snug mt-1.5">
+              <div className="text-[10px] text-stone-700 leading-snug mt-1">
                 <p>{normalized.addressLine1}</p>
                 <p>{normalized.addressLine2}</p>
                 <p>PHONE: {normalized.phone}</p>
@@ -474,24 +499,46 @@ export default function ThermalReceiptModal({ receipt, onClose }) {
               </div>
             </div>
 
-            {/* Thank You + Barcode */}
+            {/* Thank You + Scannable Bill QR + Genuine Code-128B Barcode */}
             <div className="text-center text-[10.5px] mt-4 space-y-0.5">
               <p className="font-bold">THANK YOU FOR DINING WITH US!</p>
               <p>PLEASE COME AGAIN!</p>
             </div>
 
-            <div className="mt-3 flex flex-col items-center">
-              <svg
-                width="195"
-                height="44"
-                viewBox={`0 0 ${barcode.totalWidth} 44`}
-                xmlns="http://www.w3.org/2000/svg"
+            <div className="mt-3 pt-2.5 border-t border-dashed border-stone-300 flex flex-col items-center bg-white rounded-xl p-2.5">
+              <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-stone-600 mb-1.5">
+                <QrCode className="w-3 h-3" />
+                <span>Scan to View Bill Details</span>
+              </div>
+              <SafeQRCode value={normalized.billUrl} size={84} level="M" className="mb-2" />
+
+              <div className="w-full px-1 py-1 bg-white">
+                <svg
+                  className="w-full h-11 block"
+                  viewBox={`0 0 ${barcode.totalWidth} 44`}
+                  preserveAspectRatio="none"
+                  shapeRendering="crispEdges"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <rect x="0" y="0" width={barcode.totalWidth} height="44" fill="#ffffff" />
+                  {barcode.bars.map((b, idx) => (
+                    <rect key={idx} x={b.x} y={0} width={b.w} height={44} fill="#111111" />
+                  ))}
+                </svg>
+              </div>
+              <span className="text-[11px] font-bold tracking-[0.18em] mt-1 text-stone-900">
+                {normalized.barcodeCode}
+              </span>
+
+              <a
+                href={normalized.billUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 hover:text-amber-800 underline"
               >
-                {barcode.bars.map((b, idx) => (
-                  <rect key={idx} x={b.x} y={0} width={b.w} height={42} fill="#111111" />
-                ))}
-              </svg>
-              <span className="text-[11px] tracking-widest mt-1">{normalized.barcodeValue}</span>
+                <span>Open Digital Bill Link</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
             </div>
           </div>
         </div>

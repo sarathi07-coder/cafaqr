@@ -9,6 +9,7 @@ import React from 'react';
 export default function KrishLogo({
   size = 'md', // 'sm' | 'md' | 'lg' | 'xl'
   showTagline = false,
+  showMascot = false,
   taglineText = 'Taste the Happiness',
   className = '',
   linkTo = null
@@ -20,14 +21,30 @@ export default function KrishLogo({
     xl: 'h-28'
   };
 
+  const mascotHeightMap = {
+    sm: 'h-9',
+    md: 'h-13',
+    lg: 'h-18',
+    xl: 'h-24'
+  };
+
   const selectedHeight = heightMap[size] || size;
+  const selectedMascotHeight = mascotHeightMap[size] || 'h-14';
 
   const content = (
     <div className={`inline-flex flex-col items-center select-none ${className}`}>
-      <div className="relative flex items-center justify-center">
+      <div className="relative flex items-center justify-center gap-2">
         {/* Glow ambient highlight behind logo */}
         <div className="absolute -inset-2 bg-gradient-to-r from-amber-500/20 via-yellow-400/20 to-red-500/20 rounded-full blur-md opacity-70 pointer-events-none" />
-        
+
+        {showMascot && (
+          <img
+            src="/krish_chef_mascot.png"
+            alt="KRISH Chef"
+            className={`${selectedMascotHeight} w-auto object-contain drop-shadow-[0_4px_12px_rgba(255,196,0,0.3)] relative z-10 transition-transform duration-300 hover:scale-105`}
+          />
+        )}
+
         {/* Logo Image */}
         <img
           src="/krish_logo.png"

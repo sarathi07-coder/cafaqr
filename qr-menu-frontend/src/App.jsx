@@ -8,6 +8,7 @@ const CustomerMenuPage = lazy(() => import('./pages/CustomerMenuPage'));
 const KitchenPage = lazy(() => import('./pages/KitchenPage'));
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
 const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
+const BillViewPage = lazy(() => import('./pages/BillViewPage'));
 
 // Minimal loading spinner shown while a page chunk downloads
 function PageLoader() {
@@ -33,6 +34,8 @@ export default function App() {
               <Route path="/kitchen" element={<KitchenPage />} />
               <Route path="/admin" element={<AdminDashboardPage />} />
               <Route path="/admin/login" element={<AdminLoginPage />} />
+              <Route path="/bill" element={<BillViewPage />} />
+              <Route path="/bill/:code" element={<BillViewPage />} />
               <Route path="*" element={<Navigate to="/order" replace />} />
             </Routes>
           </Suspense>

@@ -345,6 +345,17 @@ async function runMasterSuite() {
     return `Order marked ${data.order?.status || 'PAID'} via UPI`;
   });
 
+  await testStep('Scan Barcode / Lookup Digital Receipt (GET /order/receipt/:code)', async () => {
+    const barcodeCode = `KR-${String(testOrderId).slice(0, 6).toUpperCase()}`;
+    const res = await fetch(`${API_BASE}/order/receipt/${encodeURIComponent(barcodeCode)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const bill = await res.json();
+    if (!bill.orderId || !Array.isArray(bill.items) || bill.items.length === 0) {
+      throw new Error('Missing itemized bill data on barcode lookup');
+    }
+    return `Barcode ${barcodeCode} -> ${bill.items.length} items, Total ₹${bill.total}`;
+  });
+
   // SECTION 8: Customer 5-Star Reviews
   console.log('\n--- SECTION 8: Diner Feedback & 5-Star Reviews ---');
   await testStep('Submit Diner 5-Star Review (POST /order/feedback/submit)', async () => {
