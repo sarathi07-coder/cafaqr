@@ -11,17 +11,42 @@ export default function KitchenPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [restaurantId, setRestaurantId] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const soundEnabledRef = useRef(true);
   const audioContextRef = useRef(null);
+  const prevTicketIdsRef = useRef(new Set());
+  const isInitialLoadRef = useRef(true);
+
+  const ensureAudioContext = () => {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioCtx();
+    }
+    if (audioContextRef.current.state === 'suspended') {
+      audioContextRef.current.resume().catch(() => {});
+    }
+    return audioContextRef.current;
+  };
+
+  // Unlock Web Audio on first user interaction so background polling chimes can play reliably
+  useEffect(() => {
+    const unlockAudio = () => {
+      ensureAudioContext();
+    };
+    window.addEventListener('pointerdown', unlockAudio, { once: true });
+    window.addEventListener('keydown', unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+  }, []);
 
   // Play kitchen audio chime using Web Audio API
   const playKitchenChime = () => {
-    if (!soundEnabled) return;
+    if (!soundEnabledRef.current) return;
     try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      const ctx = audioContextRef.current;
-      if (ctx.state === 'suspended') ctx.resume();
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
 
       const now = ctx.currentTime;
       // Tone 1
@@ -50,6 +75,16 @@ export default function KitchenPage() {
     }
   };
 
+  const toggleSound = () => {
+    const next = !soundEnabled;
+    soundEnabledRef.current = next;
+    setSoundEnabled(next);
+    if (next) {
+      ensureAudioContext();
+      playKitchenChime();
+    }
+  };
+
   const loadTickets = async (restId) => {
     if (!restId) return;
     try {
@@ -63,6 +98,20 @@ export default function KitchenPage() {
         id: t.id || t.order_id,
         order_id: t.order_id || t.id,
       }));
+
+      // Trigger kitchen chime when polling detects newly arrived pending tickets
+      const currentIds = new Set(safeTickets.map((t) => t.id));
+      if (!isInitialLoadRef.current) {
+        const hasNewPendingTicket = safeTickets.some(
+          (t) => t.status === 'PENDING' && !prevTicketIdsRef.current.has(t.id)
+        );
+        if (hasNewPendingTicket) {
+          playKitchenChime();
+        }
+      } else {
+        isInitialLoadRef.current = false;
+      }
+      prevTicketIdsRef.current = currentIds;
 
       setTickets(safeTickets);
     } catch (err) {
@@ -188,7 +237,7 @@ export default function KitchenPage() {
         <div className="flex items-center gap-2.5">
           {/* Sound Toggle */}
           <button
-            onClick={() => setSoundEnabled(!soundEnabled)}
+            onClick={toggleSound}
             className={`p-2.5 rounded-xl border transition flex items-center gap-1.5 cursor-pointer ${
               soundEnabled
                 ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
