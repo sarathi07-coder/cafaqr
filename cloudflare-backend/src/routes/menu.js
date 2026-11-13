@@ -13,7 +13,14 @@ menu.get('/:restaurantId/categories', async (c) => {
       `SELECT DISTINCT COALESCE(category, 'General') AS category 
        FROM menu_items 
        WHERE restaurant_id = ? 
-       ORDER BY category ASC`
+       ORDER BY 
+         CASE 
+           WHEN category = 'Briyani' THEN 1
+           WHEN category = 'Fried Rice' THEN 2
+           WHEN category = 'Noodles' THEN 3
+           WHEN category = 'Parotta' THEN 4
+           ELSE 10
+         END ASC, category ASC`
     )
       .bind(restaurantId)
       .all();
@@ -53,7 +60,14 @@ menu.get('/:restaurantId', async (c) => {
       query += ` AND available = 1`;
     }
 
-    query += ` ORDER BY category ASC, name ASC`;
+    query += ` ORDER BY 
+      CASE 
+        WHEN category = 'Briyani' THEN 1
+        WHEN category = 'Fried Rice' THEN 2
+        WHEN category = 'Noodles' THEN 3
+        WHEN category = 'Parotta' THEN 4
+        ELSE 10
+      END ASC, category ASC, name ASC`;
 
     const res = await c.env.DB.prepare(query).bind(...params).all();
     const items = (res.results || []).map((item) => ({

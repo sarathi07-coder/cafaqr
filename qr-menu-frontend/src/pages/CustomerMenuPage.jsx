@@ -73,6 +73,11 @@ class SafeModalBoundary extends React.Component {
 
 // Category emoji icon mapping for quick visual recognition
 const CATEGORY_ICONS = {
+  'briyani': '🍲',
+  'fried rice': '🍚',
+  'noodles': '🥢',
+  'parotta': '🫓',
+  'porotta': '🫓',
   'mojito': '🍹',
   'ice cream': '🍨',
   'coffee & milk': '☕',
@@ -85,11 +90,18 @@ const CATEGORY_ICONS = {
   'bun': '🥯',
   'maggi': '🍜',
   'bread omblate': '🍳',
-  'briyani': '🍲',
-  'fried rice': '🍚',
-  'noodles': '🥢',
   'others': '🥘',
   'omblate': '🥚'
+};
+
+// Priority ordering: Briyani (1), Fried Rice (2), Noodles (3), Parotta (4), then remaining categories
+export const getCategoryPriority = (category = '') => {
+  const norm = String(category).trim().toLowerCase();
+  if (norm === 'briyani' || norm === 'biryani') return 1;
+  if (norm === 'fried rice' || norm === 'rice') return 2;
+  if (norm === 'noodles' || norm === 'noodle') return 3;
+  if (norm === 'parotta' || norm === 'porotta') return 4;
+  return 10;
 };
 
 const CAFE_CATEGORIES = new Set([
@@ -99,7 +111,7 @@ const CAFE_CATEGORIES = new Set([
 ]);
 
 const RESTAURANT_CATEGORIES = new Set([
-  'briyani', 'fried rice', 'noodles', 'others', 'omblate'
+  'briyani', 'fried rice', 'noodles', 'parotta', 'porotta', 'others', 'omblate'
 ]);
 
 export default function CustomerMenuPage() {
@@ -248,7 +260,13 @@ export default function CustomerMenuPage() {
             : (Array.isArray(menuData?.items) ? menuData.items : []);
           setMenuItems(rawItems);
 
-          const uniqueCats = Array.from(new Set(rawItems.map((it) => it.category).filter(Boolean)));
+          const uniqueCats = Array.from(new Set(rawItems.map((it) => it.category).filter(Boolean)))
+            .sort((a, b) => {
+              const pA = getCategoryPriority(a);
+              const pB = getCategoryPriority(b);
+              if (pA !== pB) return pA - pB;
+              return a.localeCompare(b);
+            });
           setCategories(uniqueCats);
         }
 
@@ -285,7 +303,13 @@ export default function CustomerMenuPage() {
         api.getMenu(restaurantId).then((data) => {
           const rawItems = Array.isArray(data) ? data : (data?.items || []);
           setMenuItems(rawItems);
-          const uniqueCats = Array.from(new Set(rawItems.map((it) => it.category).filter(Boolean)));
+          const uniqueCats = Array.from(new Set(rawItems.map((it) => it.category).filter(Boolean)))
+            .sort((a, b) => {
+              const pA = getCategoryPriority(a);
+              const pB = getCategoryPriority(b);
+              if (pA !== pB) return pA - pB;
+              return a.localeCompare(b);
+            });
           setCategories(uniqueCats);
         });
       }
@@ -380,13 +404,20 @@ export default function CustomerMenuPage() {
     }
   }, [toastMessage]);
 
-  // Filter categories by menu mode (Cafe vs Restaurant)
-  const displayedCategories = categories.filter((cat) => {
-    const lower = cat.toLowerCase();
-    if (menuMode === 'CAFE') return CAFE_CATEGORIES.has(lower);
-    if (menuMode === 'RESTAURANT') return RESTAURANT_CATEGORIES.has(lower);
-    return true;
-  });
+  // Filter categories by menu mode (Cafe vs Restaurant) and sort: Briyani (1), Fried Rice (2), Noodles (3), Parotta (4), then remaining
+  const displayedCategories = categories
+    .filter((cat) => {
+      const lower = cat.toLowerCase();
+      if (menuMode === 'CAFE') return CAFE_CATEGORIES.has(lower);
+      if (menuMode === 'RESTAURANT') return RESTAURANT_CATEGORIES.has(lower);
+      return true;
+    })
+    .sort((a, b) => {
+      const pA = getCategoryPriority(a);
+      const pB = getCategoryPriority(b);
+      if (pA !== pB) return pA - pB;
+      return a.localeCompare(b);
+    });
 
   // Filtered menu items
   const filteredItems = menuItems.filter((item) => {
@@ -422,6 +453,21 @@ export default function CustomerMenuPage() {
 
     return matchesMode && matchesCategory && matchesSearch && matchesDiet;
   });
+
+  // When activeCategory === 'ALL' (or default view), ensure Briyani, Rice, Noodles, Parotta items appear first!
+  const displayedItems = React.useMemo(() => {
+    if (activeCategory === 'ALL') {
+      return [...filteredItems].sort((a, b) => {
+        const pA = getCategoryPriority(a.category);
+        const pB = getCategoryPriority(b.category);
+        if (pA !== pB) return pA - pB;
+        const catCompare = (a.category || '').localeCompare(b.category || '');
+        if (catCompare !== 0) return catCompare;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+    }
+    return filteredItems;
+  }, [filteredItems, activeCategory]);
 
   // Diet counts
   const dietCounts = React.useMemo(() => {
@@ -849,7 +895,7 @@ export default function CustomerMenuPage() {
 
             {/* Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-4">
-              {filteredItems.map((item) => (
+              {displayedItems.map((item) => (
                 <MenuItemCard key={item.id} item={item} />
               ))}
             </div>

@@ -70,6 +70,15 @@ import {
   downloadStandeeQrSvg,
 } from '../utils/tableDisplay';
 
+const getCategoryPriority = (category = '') => {
+  const norm = String(category).trim().toLowerCase();
+  if (norm === 'briyani' || norm === 'biryani') return 1;
+  if (norm === 'fried rice' || norm === 'rice') return 2;
+  if (norm === 'noodles' || norm === 'noodle') return 3;
+  if (norm === 'parotta' || norm === 'porotta') return 4;
+  return 10;
+};
+
 class TabErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -2237,7 +2246,12 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
 
             {/* Category Filter Ribbon */}
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-              {Array.from(new Set(['ALL', ...(Array.isArray(menuItems) ? menuItems.map(it => it.category).filter(Boolean) : [])])).map((cat) => (
+              {['ALL', ...Array.from(new Set(Array.isArray(menuItems) ? menuItems.map(it => it.category).filter(Boolean) : [])).sort((a, b) => {
+                const pA = getCategoryPriority(a);
+                const pB = getCategoryPriority(b);
+                if (pA !== pB) return pA - pB;
+                return a.localeCompare(b);
+              })].map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setSelectedMenuCategory(cat)}
@@ -2256,6 +2270,16 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {(Array.isArray(menuItems) ? menuItems : [])
                 .filter((it) => selectedMenuCategory === 'ALL' || (it?.category || '').toLowerCase() === selectedMenuCategory.toLowerCase())
+                .sort((a, b) => {
+                  if (selectedMenuCategory === 'ALL') {
+                    const pA = getCategoryPriority(a.category);
+                    const pB = getCategoryPriority(b.category);
+                    if (pA !== pB) return pA - pB;
+                    const catComp = (a.category || '').localeCompare(b.category || '');
+                    if (catComp !== 0) return catComp;
+                  }
+                  return (a.name || '').localeCompare(b.name || '');
+                })
                 .map((item) => {
                   const isAvail = item.is_available !== false && item.available !== false;
                   const hasOffer = item.original_price && parseFloat(item.original_price) > parseFloat(item.price);
@@ -3657,6 +3681,7 @@ export default function AdminDashboardPage({ embedded = false, onLogout }) {
                     <option value="Briyani">Briyani</option>
                     <option value="Fried Rice">Fried Rice</option>
                     <option value="Noodles">Noodles</option>
+                    <option value="Parotta">Parotta</option>
                     <option value="Others">Others</option>
                     <option value="Omblate">Omblate</option>
                   </select>

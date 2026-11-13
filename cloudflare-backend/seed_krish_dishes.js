@@ -84,12 +84,14 @@ const KRISH_ITEMS = [
   { name: 'Paneer Noodles', category: 'Noodles', price: 110, isVeg: true, description: 'Golden cottage cheese strips stir-fried with seasoned noodles', photoUrl: '/menu-images/B_02_04_paneer_noodles.png' },
   { name: 'Cauliflower Noodles', category: 'Noodles', price: 110, isVeg: true, description: 'Crunchy battered cauliflower tossed with street style noodles', photoUrl: '/menu-images/B_02_05_cauliflower_noodles.png' },
 
+  // --- RESTAURANT MENU: PAROTTA ---
+  { name: 'Chilli Parotta', category: 'Parotta', price: 100, isVeg: true, description: 'Shredded crispy parotta tossed in spicy onion-capsicum chili gravy', photoUrl: '/menu-images/B_03_05_chilli_parotta.png' },
+  { name: 'Chicken Chilli Parotta', category: 'Parotta', price: 120, isVeg: false, description: 'Shredded crispy parotta tossed with spicy chicken bites, onion, capsicum and chili masala', photoUrl: '/menu-images/B_03_05_chilli_parotta.png' },
+  { name: 'Mutta Parotta', category: 'Parotta', price: 80, isVeg: false, description: 'Egg kothu parotta minced on tawa with salna and green chilies', photoUrl: '/menu-images/A_03_07_mutta_parotta.png' },
+  { name: 'Chicken Mutta Parotta', category: 'Parotta', price: 120, isVeg: false, description: 'Minced chicken and egg kothu parotta with aromatic spices', photoUrl: '/menu-images/A_04_01_chicken_mutta_parotta.png' },
+
   // --- RESTAURANT MENU: OTHERS ---
   { name: 'Curd Rice + Chicken 65', category: 'Others', price: 110, isVeg: false, description: 'Cooling tempered curd rice served with hot crunchy Chicken 65', photoUrl: '/menu-images/B_03_04_curd_rice_chicken_65.png' },
-  { name: 'Chilli Parotta', category: 'Others', price: 100, isVeg: true, description: 'Shredded crispy parotta tossed in spicy onion-capsicum chili gravy', photoUrl: '/menu-images/B_03_05_chilli_parotta.png' },
-  { name: 'Chicken Chilli Parotta', category: 'Others', price: 120, isVeg: false, description: 'Shredded crispy parotta tossed with spicy chicken bites, onion, capsicum and chili masala', photoUrl: '/menu-images/B_03_05_chilli_parotta.png' },
-  { name: 'Mutta Parotta', category: 'Others', price: 80, isVeg: false, description: 'Egg kothu parotta minced on tawa with salna and green chilies', photoUrl: '/menu-images/A_03_07_mutta_parotta.png' },
-  { name: 'Chicken Mutta Parotta', category: 'Others', price: 120, isVeg: false, description: 'Minced chicken and egg kothu parotta with aromatic spices', photoUrl: '/menu-images/A_04_01_chicken_mutta_parotta.png' },
   { name: 'Chicken Chilly', category: 'Others', price: 60, isVeg: false, description: 'Tender chicken bites stir-fried with green chilies and curry leaves', photoUrl: '/menu-images/A_04_02_chicken_chilly.png' },
 
   // --- RESTAURANT MENU: OMBLATE ---
