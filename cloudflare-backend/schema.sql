@@ -103,6 +103,10 @@ CREATE TABLE IF NOT EXISTS order_items (
     status TEXT CHECK(status IN ('PENDING','PREPARING','READY','SERVED')) NOT NULL DEFAULT 'PENDING',
     customer_seat INTEGER DEFAULT 1,
     customer_label TEXT DEFAULT 'Customer 1',
+    is_paid INTEGER DEFAULT 0,
+    paid_at TEXT,
+    payment_method TEXT,
+    individual_bill_number TEXT,
     special_instructions TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );

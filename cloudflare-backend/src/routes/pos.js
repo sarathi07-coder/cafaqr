@@ -52,7 +52,7 @@ async function recalculateOrderTotals(db, orderId, restaurantId) {
 pos.get('/tables/status', async (c) => {
   const restaurantId = c.req.query('restaurantId') || 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
   try {
-    const [tablesRes, activeOrdersRes] = await Promise.all([
+    const [tablesRes, activeOrdersRes, activeItemsRes] = await Promise.all([
       c.env.DB.prepare(
         'SELECT id, number FROM tables WHERE restaurant_id = ? ORDER BY number ASC'
       ).bind(restaurantId).all(),
@@ -65,12 +65,28 @@ pos.get('/tables/status', async (c) => {
          LEFT JOIN order_items oi ON o.id = oi.order_id AND oi.status != 'CANCELLED'
          WHERE o.restaurant_id = ? AND o.status NOT IN ('PAID', 'CANCELLED')
          GROUP BY o.id`
+      ).bind(restaurantId).all(),
+      c.env.DB.prepare(
+        `SELECT oi.id, oi.order_id, oi.menu_item_id, oi.quantity, oi.price_at_order, oi.status,
+                oi.customer_seat, oi.customer_label, oi.is_paid, oi.paid_at, oi.payment_method, oi.individual_bill_number,
+                mi.name, mi.category
+         FROM order_items oi
+         JOIN menu_items mi ON oi.menu_item_id = mi.id
+         JOIN orders o ON oi.order_id = o.id
+         WHERE o.restaurant_id = ? AND o.status NOT IN ('PAID', 'CANCELLED') AND oi.status != 'CANCELLED'
+         ORDER BY oi.customer_seat ASC, oi.created_at ASC`
       ).bind(restaurantId).all()
     ]);
 
     const activeOrdersByTable = {};
     for (const ord of (activeOrdersRes.results || [])) {
       activeOrdersByTable[ord.table_id] = ord;
+    }
+
+    const itemsByOrder = {};
+    for (const it of (activeItemsRes.results || [])) {
+      if (!itemsByOrder[it.order_id]) itemsByOrder[it.order_id] = [];
+      itemsByOrder[it.order_id].push(it);
     }
 
     const now = Date.now();
@@ -86,6 +102,50 @@ pos.get('/tables/status', async (c) => {
         status = activeOrd.status === 'READY' ? 'BILLING' : 'OCCUPIED';
         const createdMs = new Date(toUtcIso(activeOrd.created_at)).getTime();
         const elapsedMinutes = Math.max(0, Math.floor((now - createdMs) / 60000));
+        const orderItems = itemsByOrder[activeOrd.id] || [];
+
+        // Build 1 to 4 customer seats breakdown
+        const seatsBreakdownMap = {
+          1: { seatNumber: 1, label: 'Customer 1', items: [], subtotal: 0, unpaidSubtotal: 0, isPaid: false },
+          2: { seatNumber: 2, label: 'Customer 2', items: [], subtotal: 0, unpaidSubtotal: 0, isPaid: false },
+          3: { seatNumber: 3, label: 'Customer 3', items: [], subtotal: 0, unpaidSubtotal: 0, isPaid: false },
+          4: { seatNumber: 4, label: 'Customer 4', items: [], subtotal: 0, unpaidSubtotal: 0, isPaid: false },
+          0: { seatNumber: 0, label: 'Table Shared', items: [], subtotal: 0, unpaidSubtotal: 0, isPaid: false }
+        };
+
+        for (const it of orderItems) {
+          const sNum = it.customer_seat !== undefined && it.customer_seat !== null ? Number(it.customer_seat) : 1;
+          const target = seatsBreakdownMap[sNum] || seatsBreakdownMap[1];
+          const lineTotal = Number(it.price_at_order) * Number(it.quantity);
+          const isItemPaid = Number(it.is_paid) === 1;
+
+          target.items.push({
+            id: it.id,
+            menuItemId: it.menu_item_id,
+            name: it.name,
+            category: it.category,
+            price: Number(it.price_at_order),
+            quantity: Number(it.quantity),
+            lineTotal,
+            isPaid: isItemPaid,
+            paidAt: it.paid_at,
+            paymentMethod: it.payment_method,
+            individualBillNumber: it.individual_bill_number
+          });
+          target.subtotal += lineTotal;
+          if (!isItemPaid) {
+            target.unpaidSubtotal += lineTotal;
+          }
+        }
+
+        const seatsBreakdown = Object.values(seatsBreakdownMap)
+          .filter((s) => s.items.length > 0)
+          .map((s) => ({
+            ...s,
+            isPaid: s.items.length > 0 && s.items.every((it) => it.isPaid),
+            individualBillNumber: s.items[0]?.individualBillNumber || null,
+            paymentMethod: s.items[0]?.paymentMethod || null
+          }));
 
         activeOrderData = {
           orderId: activeOrd.id,
@@ -97,7 +157,8 @@ pos.get('/tables/status', async (c) => {
           notes: activeOrd.notes || '',
           status: activeOrd.status,
           createdAt: activeOrd.created_at,
-          elapsedMinutes
+          elapsedMinutes,
+          seatsBreakdown
         };
       }
 
@@ -250,7 +311,8 @@ pos.get('/table/:number/active', async (c) => {
     }
 
     const itemsRes = await c.env.DB.prepare(
-      `SELECT oi.id, oi.menu_item_id, oi.quantity, oi.price_at_order, oi.status, oi.customer_seat, oi.customer_label, oi.special_instructions,
+      `SELECT oi.id, oi.menu_item_id, oi.quantity, oi.price_at_order, oi.status, oi.customer_seat, oi.customer_label,
+              oi.is_paid, oi.paid_at, oi.payment_method, oi.individual_bill_number, oi.special_instructions,
               mi.name, mi.category, mi.photo_url, mi.is_veg
        FROM order_items oi
        JOIN menu_items mi ON oi.menu_item_id = mi.id
@@ -261,18 +323,20 @@ pos.get('/table/:number/active', async (c) => {
     const items = itemsRes.results || [];
 
     // Group items by Customer Seat (Customer 1 to 4, plus Shared)
-    const seatsBreakdown = {
-      1: { seatNumber: 1, label: 'Customer 1', items: [], subtotal: 0 },
-      2: { seatNumber: 2, label: 'Customer 2', items: [], subtotal: 0 },
-      3: { seatNumber: 3, label: 'Customer 3', items: [], subtotal: 0 },
-      4: { seatNumber: 4, label: 'Customer 4', items: [], subtotal: 0 },
-      0: { seatNumber: 0, label: 'Table Shared', items: [], subtotal: 0 },
+    const seatsBreakdownMap = {
+      1: { seatNumber: 1, label: 'Customer 1', items: [], subtotal: 0, unpaidSubtotal: 0, isPaid: false },
+      2: { seatNumber: 2, label: 'Customer 2', items: [], subtotal: 0, unpaidSubtotal: 0, isPaid: false },
+      3: { seatNumber: 3, label: 'Customer 3', items: [], subtotal: 0, unpaidSubtotal: 0, isPaid: false },
+      4: { seatNumber: 4, label: 'Customer 4', items: [], subtotal: 0, unpaidSubtotal: 0, isPaid: false },
+      0: { seatNumber: 0, label: 'Table Shared', items: [], subtotal: 0, unpaidSubtotal: 0, isPaid: false },
     };
 
     for (const it of items) {
       const sNum = it.customer_seat !== undefined && it.customer_seat !== null ? Number(it.customer_seat) : 1;
-      const target = seatsBreakdown[sNum] || seatsBreakdown[1];
+      const target = seatsBreakdownMap[sNum] || seatsBreakdownMap[1];
       const lineTotal = Number(it.price_at_order) * Number(it.quantity);
+      const isItemPaid = Number(it.is_paid) === 1;
+
       target.items.push({
         id: it.id,
         menuItemId: it.menu_item_id,
@@ -282,10 +346,26 @@ pos.get('/table/:number/active', async (c) => {
         quantity: Number(it.quantity),
         lineTotal,
         status: it.status,
+        isPaid: isItemPaid,
+        paidAt: it.paid_at,
+        paymentMethod: it.payment_method,
+        individualBillNumber: it.individual_bill_number,
         specialInstructions: it.special_instructions
       });
       target.subtotal += lineTotal;
+      if (!isItemPaid) {
+        target.unpaidSubtotal += lineTotal;
+      }
     }
+
+    const seatsBreakdown = Object.values(seatsBreakdownMap)
+      .filter((s) => s.items.length > 0)
+      .map((s) => ({
+        ...s,
+        isPaid: s.items.length > 0 && s.items.every((it) => it.isPaid),
+        individualBillNumber: s.items[0]?.individualBillNumber || null,
+        paymentMethod: s.items[0]?.paymentMethod || null
+      }));
 
     return c.json({
       hasActiveOrder: true,
@@ -301,7 +381,7 @@ pos.get('/table/:number/active', async (c) => {
       total: Number(ord.total || 0),
       createdAt: ord.created_at,
       items,
-      seatsBreakdown: Object.values(seatsBreakdown).filter((s) => s.items.length > 0)
+      seatsBreakdown
     });
   } catch (err) {
     console.error('POS Table Active Order Error:', err);
@@ -310,12 +390,14 @@ pos.get('/table/:number/active', async (c) => {
 });
 
 // POST /api/pos/order/:id/settle (Cashier settles bill, prints, & commits to permanent bills_archive)
+// Supports settling an individual seat (body.seat) OR the entire table (body.seat omitted)
 pos.post('/order/:id/settle', async (c) => {
   const orderId = c.req.param('id');
   try {
     const body = await c.req.json().catch(() => ({}));
     const paymentMethod = (body.paymentMethod || 'CASH').toUpperCase();
     const cashierName = (body.cashierName || 'Cashier').trim();
+    const targetSeat = (body.seat !== undefined && body.seat !== null && body.seat !== '') ? Number(body.seat) : null;
 
     const ord = await c.env.DB.prepare(
       `SELECT o.id, o.restaurant_id, o.table_id, o.server_name, o.guest_count, o.subtotal, o.total, o.notes, o.created_at,
@@ -329,7 +411,8 @@ pos.post('/order/:id/settle', async (c) => {
     if (!ord) return c.json({ error: 'Order not found' }, 404);
 
     const itemsRes = await c.env.DB.prepare(
-      `SELECT oi.id, oi.menu_item_id, oi.quantity, oi.price_at_order, oi.customer_seat, oi.customer_label, oi.special_instructions,
+      `SELECT oi.id, oi.menu_item_id, oi.quantity, oi.price_at_order, oi.customer_seat, oi.customer_label,
+              oi.is_paid, oi.paid_at, oi.payment_method, oi.individual_bill_number, oi.special_instructions,
               mi.name, mi.category
        FROM order_items oi
        JOIN menu_items mi ON oi.menu_item_id = mi.id
@@ -337,30 +420,177 @@ pos.post('/order/:id/settle', async (c) => {
        ORDER BY oi.customer_seat ASC, oi.created_at ASC`
     ).bind(orderId).all();
 
-    const items = (itemsRes.results || []).map((it) => ({
+    const allItems = (itemsRes.results || []).map((it) => ({
+      id: it.id,
       name: it.name,
       category: it.category,
       quantity: Number(it.quantity),
       price: Number(it.price_at_order),
       amount: Number(it.quantity) * Number(it.price_at_order),
       seat: Number(it.customer_seat || 1),
-      seatLabel: it.customer_label || `Customer ${it.customer_seat || 1}`,
+      seatLabel: it.customer_label || (Number(it.customer_seat) === 0 ? 'Table Shared' : `Customer ${it.customer_seat || 1}`),
+      isPaid: Number(it.is_paid) === 1,
+      paidAt: it.paid_at,
+      paymentMethod: it.payment_method,
+      individualBillNumber: it.individual_bill_number,
       specialInstructions: it.special_instructions
     }));
 
-    const subtotal = items.reduce((sum, it) => sum + it.amount, 0);
-    const taxAmount = 0; // 0% GST
-    const total = subtotal;
-
     const istNow = formatIstDateTime();
     const shortCode = orderId.replace(/[^a-zA-Z0-9]/g, '').slice(-4).toUpperCase();
-    const billNumber = `KB-${istNow.dateStr.replace(/-/g, '').slice(2)}-${shortCode}`;
+    const billBaseNumber = `KB-${istNow.dateStr.replace(/-/g, '').slice(2)}-${shortCode}`;
     const tableLabel = Number(ord.table_number) === 0 ? 'PARCEL / TAKEAWAY' : `Table #${ord.table_number}`;
+
+    // ─────────────────────────────────────────────────────────────
+    // CASE A: SETTLE INDIVIDUAL CUSTOMER SEAT (Customer 1, 2, 3, 4, 0)
+    // ─────────────────────────────────────────────────────────────
+    if (targetSeat !== null) {
+      const seatItems = allItems.filter((it) => it.seat === targetSeat);
+      if (seatItems.length === 0) {
+        return c.json({ error: `No items found for Customer ${targetSeat}` }, 400);
+      }
+
+      const unpaidSeatItems = seatItems.filter((it) => !it.isPaid);
+      const itemsToSettle = unpaidSeatItems.length > 0 ? unpaidSeatItems : seatItems;
+      const seatSubtotal = itemsToSettle.reduce((sum, it) => sum + it.amount, 0);
+      const indBillNumber = `${billBaseNumber}-${targetSeat === 0 ? 'SHR' : 'C' + targetSeat}`;
+      const seatLabel = seatItems[0].seatLabel;
+      const billArchiveId = generateUUID();
+
+      // Individual thermal slip text
+      const indLines = [
+        '================================================',
+        '          KRISH CAFE AND RESTAURANT             ',
+        '         Rathinam College Front Gate            ',
+        '            Eachanari, Coimbatore               ',
+        '               PH: 8760633322                   ',
+        '================================================',
+        `BILL NO: ${indBillNumber.padEnd(16)} TABLE: ${tableLabel}`,
+        `DINER:   ${seatLabel.padEnd(16)} SERVER: ${ord.server_name || 'Captain'}`,
+        `DATE:    ${istNow.full.padEnd(16)} PAYMENT: ${paymentMethod}`,
+        '------------------------------------------------',
+        'ITEM                           QTY  PRICE AMOUNT',
+        '------------------------------------------------',
+        ...itemsToSettle.map((it) => {
+          const nameCol = it.name.slice(0, 27).padEnd(28);
+          const qtyCol = String(it.quantity).padStart(3);
+          const priceCol = it.price.toFixed(0).padStart(6);
+          const amtCol = it.amount.toFixed(0).padStart(7);
+          return `${nameCol}${qtyCol}${priceCol}${amtCol}`;
+        }),
+        '------------------------------------------------',
+        `CUSTOMER SUBTOTAL:                     ₹${seatSubtotal.toFixed(2)}`,
+        `TAX (0% GST):                            ₹0.00`,
+        `TOTAL PAYABLE:                         ₹${seatSubtotal.toFixed(2)}`,
+        '------------------------------------------------',
+        `PAID VIA ${paymentMethod}`,
+        '           THANK YOU! VISIT AGAIN!              ',
+        '================================================'
+      ];
+      const thermalText = indLines.join('\n');
+
+      const seatBreakdownObj = {
+        seat: targetSeat,
+        seatLabel,
+        individualBillNumber: indBillNumber,
+        items: itemsToSettle,
+        subtotal: seatSubtotal,
+        taxAmount: 0,
+        total: seatSubtotal,
+        thermalText
+      };
+
+      // Commit individual customer bill to permanent archive
+      await c.env.DB.prepare(
+        `INSERT INTO bills_archive (
+           id, bill_number, order_id, restaurant_id, table_number, table_label, server_name, guest_count,
+           subtotal, discount_amount, tax_amount, total, payment_method, customer_breakdown, items_json, created_at, paid_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 0, 0, ?, ?, ?, ?, ?, datetime('now'))`
+      ).bind(
+        billArchiveId,
+        indBillNumber,
+        orderId,
+        ord.restaurant_id,
+        Number(ord.table_number),
+        `${tableLabel} (${seatLabel})`,
+        ord.server_name || 'Captain',
+        seatSubtotal,
+        seatSubtotal,
+        paymentMethod,
+        JSON.stringify([seatBreakdownObj]),
+        JSON.stringify(itemsToSettle),
+        ord.created_at
+      ).run();
+
+      // Mark this seat's items as paid
+      await c.env.DB.prepare(
+        `UPDATE order_items
+         SET is_paid = 1, paid_at = datetime('now'), payment_method = ?, individual_bill_number = ?
+         WHERE order_id = ? AND customer_seat = ? AND (is_paid = 0 OR is_paid IS NULL)`
+      ).bind(paymentMethod, indBillNumber, orderId, targetSeat).run();
+
+      // Check remaining unpaid items on table
+      const remainingRes = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS unpaid_count, COALESCE(SUM(price_at_order * quantity), 0) AS unpaid_total
+         FROM order_items
+         WHERE order_id = ? AND status != 'CANCELLED' AND (is_paid = 0 OR is_paid IS NULL)`
+      ).bind(orderId).first();
+
+      const remainingUnpaidCount = Number(remainingRes?.unpaid_count || 0);
+      const remainingTotal = Number(remainingRes?.unpaid_total || 0);
+      const tableFullySettled = remainingUnpaidCount === 0;
+
+      if (tableFullySettled) {
+        await c.env.DB.prepare(
+          "UPDATE orders SET status = 'PAID', payment_method = ?, subtotal = 0, total = 0, updated_at = datetime('now') WHERE id = ?"
+        ).bind(paymentMethod, orderId).run();
+      } else {
+        await c.env.DB.prepare(
+          "UPDATE orders SET subtotal = ?, total = ?, updated_at = datetime('now') WHERE id = ?"
+        ).bind(remainingTotal, remainingTotal, orderId).run();
+      }
+
+      return c.json({
+        success: true,
+        isIndividualSeat: true,
+        settledSeat: targetSeat,
+        seatLabel,
+        billId: billArchiveId,
+        billNumber: indBillNumber,
+        orderId,
+        tableNumber: Number(ord.table_number),
+        tableLabel: `${tableLabel} (${seatLabel})`,
+        serverName: ord.server_name || 'Captain',
+        guestCount: 1,
+        paymentMethod,
+        subtotal: seatSubtotal,
+        taxAmount: 0,
+        total: seatSubtotal,
+        items: itemsToSettle,
+        customerBreakdown: [seatBreakdownObj],
+        paidAt: istNow.full,
+        thermalText,
+        tableFullySettled,
+        isFullOrderComplete: tableFullySettled,
+        remainingUnpaidCount,
+        remainingTotal
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // CASE B: SETTLE ENTIRE TABLE (All Unpaid Customer Seats at once)
+    // ─────────────────────────────────────────────────────────────
+    const unpaidItems = allItems.filter((it) => !it.isPaid);
+    const itemsToSettle = unpaidItems.length > 0 ? unpaidItems : allItems;
+    const subtotal = itemsToSettle.reduce((sum, it) => sum + it.amount, 0);
+    const taxAmount = 0; // 0% GST
+    const total = subtotal;
+    const billNumber = billBaseNumber;
     const billArchiveId = generateUUID();
 
-    // Build customer 1 to 4 seat breakdown with dedicated sub-bills
+    // Build customer 1 to 4 seat breakdown
     const customerBreakdownMap = {};
-    for (const it of items) {
+    for (const it of itemsToSettle) {
       const sKey = it.seat === 0 ? 'Shared' : `Customer ${it.seat}`;
       if (!customerBreakdownMap[sKey]) {
         const indBillNo = `${billNumber}-${it.seat === 0 ? 'SHR' : 'C' + it.seat}`;
@@ -379,14 +609,12 @@ pos.post('/order/:id/settle', async (c) => {
       customerBreakdownMap[sKey].total += it.amount;
     }
 
-    // Sort customer breakdown: Customer 1, 2, 3, 4, then Table Shared (0)
     const customerBreakdown = Object.values(customerBreakdownMap).sort((a, b) => {
       const sA = a.seat === 0 ? 99 : a.seat;
       const sB = b.seat === 0 ? 99 : b.seat;
       return sA - sB;
     });
 
-    // Generate individual 80mm thermal text receipts for each customer
     for (const seatObj of customerBreakdown) {
       const indLines = [
         '================================================',
@@ -439,14 +667,19 @@ pos.post('/order/:id/settle', async (c) => {
       total,
       paymentMethod,
       JSON.stringify(customerBreakdown),
-      JSON.stringify(items),
+      JSON.stringify(itemsToSettle),
       ord.created_at
     ).run();
 
-    // Mark order as PAID
-    await c.env.DB.prepare(
-      "UPDATE orders SET status = 'PAID', payment_method = ?, updated_at = datetime('now') WHERE id = ?"
-    ).bind(paymentMethod, orderId).run();
+    // Mark order and all items as PAID
+    await Promise.all([
+      c.env.DB.prepare(
+        "UPDATE orders SET status = 'PAID', payment_method = ?, subtotal = 0, total = 0, updated_at = datetime('now') WHERE id = ?"
+      ).bind(paymentMethod, orderId).run(),
+      c.env.DB.prepare(
+        "UPDATE order_items SET is_paid = 1, paid_at = datetime('now'), payment_method = ? WHERE order_id = ? AND (is_paid = 0 OR is_paid IS NULL)"
+      ).bind(paymentMethod, orderId).run()
+    ]);
 
     // Format 80mm master thermal text receipt with clear individual customer sections
     const thermalMasterLines = [
@@ -492,6 +725,7 @@ pos.post('/order/:id/settle', async (c) => {
 
     return c.json({
       success: true,
+      isIndividualSeat: false,
       billId: billArchiveId,
       billNumber,
       orderId,
@@ -503,10 +737,11 @@ pos.post('/order/:id/settle', async (c) => {
       subtotal,
       taxAmount: 0,
       total,
-      items,
+      items: itemsToSettle,
       customerBreakdown,
       paidAt: istNow.full,
-      thermalText
+      thermalText,
+      tableFullySettled: true
     });
   } catch (err) {
     console.error('POS Settle Bill Error:', err);
