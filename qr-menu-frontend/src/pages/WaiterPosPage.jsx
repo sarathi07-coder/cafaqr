@@ -25,7 +25,15 @@ import {
   Sparkles,
   Send,
   UserCheck,
-  Scissors
+  Scissors,
+  ChefHat,
+  Star,
+  AlertTriangle,
+  TrendingUp,
+  Edit3,
+  Trash2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { api } from '../api';
 import KrishLogo from '../components/KrishLogo';
@@ -406,6 +414,21 @@ export default function WaiterPosPage() {
   const [viewBillModal, setViewBillModal] = useState(null);
   const [archiveReceiptViewMode, setArchiveReceiptViewMode] = useState('ALL_SEPARATE');
 
+  // Food Quantity & Dish Performance & Menu Management
+  const [dishPerformanceData, setDishPerformanceData] = useState(null);
+  const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
+  const [perfCategoryFilter, setPerfCategoryFilter] = useState('ALL');
+  const [perfSearch, setPerfSearch] = useState('');
+  const [isDishModalOpen, setIsDishModalOpen] = useState(false);
+  const [editingDish, setEditingDish] = useState(null);
+  const [dishFormData, setDishFormData] = useState({
+    name: '',
+    category: 'Briyani',
+    price: '',
+    isVeg: false,
+    available: true
+  });
+
   // Fetch Tables
   const loadTableStatus = async () => {
     try {
@@ -437,6 +460,89 @@ export default function WaiterPosPage() {
     }
   };
 
+  // Fetch Dish Performance
+  const loadDishPerformance = async () => {
+    setIsLoadingPerformance(true);
+    try {
+      const data = await api.getDishPerformance(RESTAURANT_ID);
+      setDishPerformanceData(data);
+    } catch (err) {
+      console.error('Error fetching dish performance:', err);
+    } finally {
+      setIsLoadingPerformance(false);
+    }
+  };
+
+  // 1-Click Stock Toggle
+  const handleToggleStock = async (dishId) => {
+    try {
+      await api.toggleDishAvailability(dishId);
+      showToast('Food stock status updated!');
+      await Promise.all([loadDishPerformance(), loadMenu()]);
+    } catch (err) {
+      alert('Failed to update stock: ' + err.message);
+    }
+  };
+
+  // Open Dish Modal (Add)
+  const handleOpenAddDishModal = () => {
+    setEditingDish(null);
+    setDishFormData({
+      name: '',
+      category: categories[0] || 'Briyani',
+      price: '',
+      isVeg: false,
+      available: true
+    });
+    setIsDishModalOpen(true);
+  };
+
+  // Open Dish Modal (Edit)
+  const handleOpenEditDishModal = (dish) => {
+    setEditingDish(dish);
+    setDishFormData({
+      name: dish.name || '',
+      category: dish.category || 'General',
+      price: String(dish.price || ''),
+      isVeg: Boolean(dish.isVeg ?? dish.is_veg),
+      available: Boolean(dish.available !== false)
+    });
+    setIsDishModalOpen(true);
+  };
+
+  // Save Dish (Add or Update)
+  const handleSaveDish = async (e) => {
+    e.preventDefault();
+    if (!dishFormData.name.trim() || !dishFormData.price) {
+      alert('Please fill in dish name and price');
+      return;
+    }
+
+    try {
+      const payload = {
+        name: dishFormData.name.trim(),
+        category: dishFormData.category.trim(),
+        price: parseFloat(dishFormData.price),
+        isVeg: Boolean(dishFormData.isVeg),
+        available: Boolean(dishFormData.available),
+        restaurantId: RESTAURANT_ID
+      };
+
+      if (editingDish) {
+        await api.updateMenuItem(editingDish.id, payload);
+        showToast(`✨ Updated '${payload.name}' details & rate!`);
+      } else {
+        await api.createMenuItem(payload);
+        showToast(`🎉 Added new dish '${payload.name}' to menu!`);
+      }
+
+      setIsDishModalOpen(false);
+      await Promise.all([loadDishPerformance(), loadMenu()]);
+    } catch (err) {
+      alert('Failed to save food item: ' + err.message);
+    }
+  };
+
   // Fetch Bills Archive
   const loadBillsArchive = async () => {
     setIsLoadingBills(true);
@@ -459,6 +565,7 @@ export default function WaiterPosPage() {
   useEffect(() => {
     loadTableStatus();
     loadMenu();
+    loadDishPerformance();
     const interval = setInterval(loadTableStatus, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -466,6 +573,8 @@ export default function WaiterPosPage() {
   useEffect(() => {
     if (activeTab === 'HISTORY') {
       loadBillsArchive();
+    } else if (activeTab === 'PERFORMANCE') {
+      loadDishPerformance();
     }
   }, [activeTab, billsDateFilter, billsTableFilter, billsSearch]);
 
@@ -817,6 +926,19 @@ export default function WaiterPosPage() {
             >
               <History className="w-3.5 h-3.5" />
               <span>Bills &amp; History</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('PERFORMANCE')}
+              className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                activeTab === 'PERFORMANCE'
+                  ? 'bg-amber-500 text-stone-950 font-black shadow-sm'
+                  : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              <ChefHat className="w-3.5 h-3.5" />
+              <span>Food Manager &amp; Sales</span>
             </button>
 
             {/* Back to Kitchen / Admin */}
@@ -1810,6 +1932,364 @@ export default function WaiterPosPage() {
             )}
           </div>
         )}
+
+        {/* ============================================================== */}
+        {/* TAB 5: FOOD MANAGER, QUANTITY TRACKER & DISH PERFORMANCE */}
+        {/* ============================================================== */}
+        {activeTab === 'PERFORMANCE' && (
+          <div className="space-y-6">
+            {/* Top Header & Add Dish CTA */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#171411] p-5 rounded-3xl border border-white/10 shadow-lg">
+              <div>
+                <h2 className="text-xl font-serif font-black text-white flex items-center gap-2">
+                  <ChefHat className="w-6 h-6 text-amber-400" />
+                  <span>Food Manager &amp; Dish Performance</span>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-sans font-bold">
+                    {dishPerformanceData?.summaryCounts?.totalMenuItems || menuItems.length} Menu Dishes
+                  </span>
+                </h2>
+                <p className="text-xs text-stone-400 mt-0.5">
+                  Track exact dish quantities sold today, identify highest sellers &amp; unsold dishes needing chef promotion, and update menu items/rates instantly.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={loadDishPerformance}
+                  className="px-3.5 py-2 bg-stone-800 hover:bg-stone-700 rounded-xl text-xs font-bold text-stone-300 transition flex items-center gap-1.5 cursor-pointer border border-white/10"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoadingPerformance ? 'animate-spin text-amber-400' : ''}`} />
+                  <span>Refresh Stats</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenAddDishModal}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-400 hover:brightness-110 text-stone-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-md transition cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add New Food Item</span>
+                </button>
+              </div>
+            </div>
+
+            {isLoadingPerformance && !dishPerformanceData ? (
+              <div className="py-20 text-center text-stone-400">
+                <RefreshCw className="w-8 h-8 animate-spin mx-auto text-amber-400 mb-2" />
+                <p className="text-xs">Loading live dish performance &amp; quantities...</p>
+              </div>
+            ) : (
+              <>
+                {/* 3 KPI PERFORMANCE HIGHLIGHTS */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Card 1: Total Food Prepared Today */}
+                  <div className="bg-[#171411] rounded-3xl border border-white/10 p-5 flex flex-col justify-between shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Food Quantity Today</span>
+                      <TrendingUp className="w-5 h-5 text-emerald-400" />
+                    </div>
+                    <div className="my-3">
+                      <p className="text-3xl font-black text-white font-mono">
+                        {dishPerformanceData?.totalDishesSoldToday || 0} <span className="text-sm font-sans font-bold text-stone-400">portions sold</span>
+                      </p>
+                      <p className="text-sm font-black text-emerald-400 font-mono mt-1">
+                        ₹{(dishPerformanceData?.totalDishRevenueToday || 0).toFixed(2)} today&apos;s dish sales
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-stone-400 pt-2 border-t border-white/5">
+                      <span>Ordered Today: <strong className="text-emerald-400">{dishPerformanceData?.summaryCounts?.soldTodayCount || 0} dishes</strong></span>
+                      <span>Not Ordered: <strong className="text-amber-400">{dishPerformanceData?.summaryCounts?.notOrderedTodayCount || 0} dishes</strong></span>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Star Item Today (Highest Sold) */}
+                  <div className="bg-gradient-to-br from-amber-500/15 via-[#171411] to-[#171411] rounded-3xl border border-amber-500/40 p-5 flex flex-col justify-between shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Star className="w-4 h-4 fill-amber-400" />
+                        <span>Star Item Today (Highest Sold)</span>
+                      </span>
+                    </div>
+                    {dishPerformanceData?.highestSoldDish ? (
+                      <div className="my-3">
+                        <h3 className="text-xl font-serif font-black text-white line-clamp-1">
+                          {dishPerformanceData.highestSoldDish.name}
+                        </h3>
+                        <p className="text-xs text-stone-400">
+                          {dishPerformanceData.highestSoldDish.category} &bull; ₹{dishPerformanceData.highestSoldDish.price.toFixed(2)}
+                        </p>
+                        <div className="flex items-baseline justify-between mt-2 font-mono">
+                          <span className="text-lg font-black text-amber-400">
+                            {dishPerformanceData.highestSoldDish.quantitySoldToday} portions sold
+                          </span>
+                          <span className="text-sm font-bold text-emerald-400">
+                            ₹{dishPerformanceData.highestSoldDish.revenueToday.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-stone-400 my-4">No dishes sold yet today.</p>
+                    )}
+                    <div className="text-[11px] text-amber-300/80 pt-2 border-t border-amber-500/20 font-semibold">
+                      🏆 #1 Top Performing Dish by Volume Today
+                    </div>
+                  </div>
+
+                  {/* Card 3: Action Item (Lowest / Not Sold Today) */}
+                  <div className="bg-gradient-to-br from-rose-500/15 via-[#171411] to-[#171411] rounded-3xl border border-rose-500/40 p-5 flex flex-col justify-between shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>Action Item (Needs Chef Promotion)</span>
+                      </span>
+                    </div>
+                    {dishPerformanceData?.lowestSoldDish ? (
+                      <div className="my-3">
+                        <h3 className="text-xl font-serif font-black text-white line-clamp-1">
+                          {dishPerformanceData.lowestSoldDish.name}
+                        </h3>
+                        <p className="text-xs text-stone-400">
+                          {dishPerformanceData.lowestSoldDish.category} &bull; ₹{dishPerformanceData.lowestSoldDish.price.toFixed(2)}
+                        </p>
+                        <div className="flex items-baseline justify-between mt-2 font-mono">
+                          <span className="text-lg font-black text-rose-400">
+                            {dishPerformanceData.lowestSoldDish.quantitySoldToday} ordered today
+                          </span>
+                          <span className="text-[11px] font-sans px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-bold">
+                            Promote Today
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-stone-400 my-4">All menu dishes are moving well today!</p>
+                    )}
+                    <div className="text-[11px] text-rose-300/80 pt-2 border-t border-rose-500/20 font-semibold">
+                      ⚠️ Total {dishPerformanceData?.notOrderedToday?.length || 0} dishes have 0 orders today
+                    </div>
+                  </div>
+                </div>
+
+                {/* TOP 5 VOLUME LEADERS & DISHES NOT SOLD TODAY */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Left: Top 5 Dishes By Volume Today */}
+                  <div className="bg-[#171411] rounded-3xl border border-white/10 p-5 space-y-3 shadow-lg">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                      <h3 className="text-sm font-serif font-black text-white flex items-center gap-2">
+                        <Flame className="w-4 h-4 text-amber-400" />
+                        <span>Top 5 Highest Sold Dishes Today</span>
+                      </h3>
+                      <span className="text-[11px] text-stone-400 font-bold">By Volume</span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {(dishPerformanceData?.topPerformers || []).map((dish, idx) => (
+                        <div
+                          key={dish.id}
+                          className="flex items-center justify-between p-3 rounded-2xl bg-stone-900/90 border border-white/5 hover:border-amber-500/30 transition"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className={`w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                              idx === 0
+                                ? 'bg-amber-500 text-stone-950'
+                                : idx === 1
+                                ? 'bg-stone-300 text-stone-950'
+                                : idx === 2
+                                ? 'bg-amber-700 text-white'
+                                : 'bg-stone-800 text-stone-400'
+                            }`}>
+                              #{idx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-bold text-sm text-white truncate">{dish.name}</p>
+                              <p className="text-[11px] text-stone-400">{dish.category} &bull; ₹{dish.price.toFixed(2)}</p>
+                            </div>
+                          </div>
+                          <div className="text-right font-mono shrink-0 ml-2">
+                            <p className="text-sm font-black text-amber-400">{dish.quantitySoldToday} ordered</p>
+                            <p className="text-[11px] font-bold text-emerald-400">₹{dish.revenueToday.toFixed(2)}</p>
+                          </div>
+                        </div>
+                      ))}
+                      {(!dishPerformanceData?.topPerformers || dishPerformanceData.topPerformers.length === 0) && (
+                        <p className="text-xs text-stone-500 text-center py-6">No dish sales recorded yet today.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right: Dishes NOT Sold Today (0 Ordered — Needs Chef Promotion) */}
+                  <div className="bg-[#171411] rounded-3xl border border-rose-500/30 p-5 space-y-3 shadow-lg flex flex-col">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                      <h3 className="text-sm font-serif font-black text-white flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-rose-400" />
+                        <span>Dishes NOT Sold Today (0 Orders)</span>
+                      </h3>
+                      <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[11px] font-bold border border-rose-500/30">
+                        {dishPerformanceData?.notOrderedToday?.length || 0} Unsold Items
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-stone-400">
+                      Every menu item listed below has <strong className="text-rose-300">0 orders today</strong>. Recommend these items to customers or check stock availability.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+                      {(dishPerformanceData?.notOrderedToday || []).map((dish) => (
+                        <div
+                          key={dish.id}
+                          className="p-2.5 rounded-xl bg-stone-900/90 border border-rose-500/20 flex items-center justify-between gap-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-white truncate" title={dish.name}>{dish.name}</p>
+                            <p className="text-[10px] text-stone-400">{dish.category} &bull; ₹{dish.price}</p>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-300 text-[10px] font-bold whitespace-nowrap border border-rose-500/20">
+                            0 sold
+                          </span>
+                        </div>
+                      ))}
+                      {(!dishPerformanceData?.notOrderedToday || dishPerformanceData.notOrderedToday.length === 0) && (
+                        <p className="text-xs text-emerald-400 text-center py-6 col-span-2">
+                          🎉 Incredible! Every single dish on the menu has been ordered today!
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* FULL MENU FOOD MANAGER & QUANTITY SOLD TRACKER */}
+                <div className="bg-[#171411] rounded-3xl border border-white/10 p-5 space-y-4 shadow-xl">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-white/10 pb-4">
+                    <div>
+                      <h3 className="text-base font-serif font-black text-white">
+                        Complete Menu Catalog, Sales Quantity &amp; Instant Updater
+                      </h3>
+                      <p className="text-xs text-stone-400">
+                        View exact quantity sold for every dish, toggle stock availability, or edit dish rates instantly.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
+                        <input
+                          type="text"
+                          value={perfSearch}
+                          onChange={(e) => setPerfSearch(e.target.value)}
+                          placeholder="Search dish or category..."
+                          className="text-xs bg-stone-900 pl-9 pr-3 py-2 rounded-xl border border-white/10 text-white placeholder-stone-500 outline-none focus:border-amber-400 w-52"
+                        />
+                      </div>
+
+                      <select
+                        value={perfCategoryFilter}
+                        onChange={(e) => setPerfCategoryFilter(e.target.value)}
+                        className="text-xs bg-stone-900 px-3 py-2 rounded-xl border border-white/10 text-white outline-none focus:border-amber-400"
+                      >
+                        <option value="ALL">All Menu Items</option>
+                        <option value="SOLD_TODAY">🔥 Sold Today Only</option>
+                        <option value="NOT_SOLD">⚠️ 0 Ordered Today (Unsold)</option>
+                        <option value="OUT_OF_STOCK">🚫 Out of Stock Only</option>
+                        {categories.map((cat) => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Dishes Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-stone-300">
+                      <thead className="bg-stone-900/90 text-stone-400 uppercase tracking-wider text-[10px] font-bold border-b border-white/10">
+                        <tr>
+                          <th className="px-4 py-3">Food Item</th>
+                          <th className="px-4 py-3">Category</th>
+                          <th className="px-4 py-3">Rate (₹)</th>
+                          <th className="px-4 py-3">Qty Sold Today</th>
+                          <th className="px-4 py-3">Today&apos;s Revenue</th>
+                          <th className="px-4 py-3">All-Time Qty</th>
+                          <th className="px-4 py-3">Stock Status</th>
+                          <th className="px-4 py-3 text-right">Edit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5 font-mono">
+                        {(dishPerformanceData?.allDishes || menuItems.map((m) => ({
+                          ...m,
+                          isVeg: Boolean(m.is_veg),
+                          quantitySoldToday: 0,
+                          revenueToday: 0,
+                          allTimeQuantitySold: 0
+                        })))
+                          .filter((dish) => {
+                            const matchesSearch =
+                              !perfSearch.trim() ||
+                              dish.name.toLowerCase().includes(perfSearch.toLowerCase()) ||
+                              (dish.category || '').toLowerCase().includes(perfSearch.toLowerCase());
+                            if (!matchesSearch) return false;
+                            if (perfCategoryFilter === 'ALL') return true;
+                            if (perfCategoryFilter === 'SOLD_TODAY') return dish.quantitySoldToday > 0;
+                            if (perfCategoryFilter === 'NOT_SOLD') return dish.quantitySoldToday === 0;
+                            if (perfCategoryFilter === 'OUT_OF_STOCK') return !dish.available;
+                            return (dish.category || '').toLowerCase() === perfCategoryFilter.toLowerCase();
+                          })
+                          .map((dish) => (
+                            <tr key={dish.id} className="hover:bg-white/5 transition">
+                              <td className="px-4 py-3 font-sans font-bold text-white flex items-center gap-2">
+                                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${dish.isVeg ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                <span>{dish.name}</span>
+                              </td>
+                              <td className="px-4 py-3 font-sans text-stone-400">{dish.category}</td>
+                              <td className="px-4 py-3 font-bold text-amber-400">₹{Number(dish.price).toFixed(0)}</td>
+                              <td className="px-4 py-3">
+                                {dish.quantitySoldToday > 0 ? (
+                                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-black border border-emerald-500/30">
+                                    {dish.quantitySoldToday} sold
+                                  </span>
+                                ) : (
+                                  <span className="px-2.5 py-0.5 rounded-full bg-rose-500/15 text-rose-300 font-bold border border-rose-500/20">
+                                    0 sold today
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 font-bold text-emerald-400">
+                                ₹{(dish.revenueToday || 0).toFixed(2)}
+                              </td>
+                              <td className="px-4 py-3 text-stone-400">
+                                {dish.allTimeQuantitySold || 0} total
+                              </td>
+                              <td className="px-4 py-3 font-sans">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleStock(dish.id)}
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition border ${
+                                    dish.available
+                                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25'
+                                      : 'bg-rose-500/15 text-rose-300 border-rose-500/30 hover:bg-rose-500/25'
+                                  }`}
+                                >
+                                  {dish.available ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                                  <span>{dish.available ? 'In Stock' : 'Out of Stock'}</span>
+                                </button>
+                              </td>
+                              <td className="px-4 py-3 text-right font-sans">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditDishModal(dish)}
+                                  className="px-2.5 py-1 bg-stone-800 hover:bg-stone-700 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1 cursor-pointer border border-white/10"
+                                >
+                                  <Edit3 className="w-3 h-3 text-amber-400" />
+                                  <span>Edit</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </main>
 
       {/* ============================================================== */}
@@ -2118,6 +2598,126 @@ export default function WaiterPosPage() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL 3: ADD / EDIT FOOD ITEM MODAL */}
+      {/* ============================================================== */}
+      {isDishModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[#1A1613] rounded-3xl border border-white/20 max-w-md w-full p-6 space-y-5 shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => setIsDishModalOpen(false)}
+              className="absolute right-4 top-4 text-stone-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center">
+              <ChefHat className="w-9 h-9 text-amber-400 mx-auto mb-1.5" />
+              <h3 className="font-serif font-black text-xl text-white">
+                {editingDish ? 'Edit Food Item & Rate' : 'Add New Food Item'}
+              </h3>
+              <p className="text-xs text-stone-400">
+                Changes update live across the Waiter POS &amp; Kitchen instantly
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveDish} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-stone-400 block mb-1">Dish Name</label>
+                <input
+                  type="text"
+                  required
+                  value={dishFormData.name}
+                  onChange={(e) => setDishFormData({ ...dishFormData, name: e.target.value })}
+                  placeholder="e.g. Chicken Briyani & Egg"
+                  className="w-full text-sm bg-stone-900 px-3.5 py-2.5 rounded-xl border border-white/10 text-white outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-stone-400 block mb-1">Category</label>
+                  <input
+                    type="text"
+                    required
+                    list="pos-menu-categories"
+                    value={dishFormData.category}
+                    onChange={(e) => setDishFormData({ ...dishFormData, category: e.target.value })}
+                    placeholder="e.g. Briyani"
+                    className="w-full text-sm bg-stone-900 px-3.5 py-2.5 rounded-xl border border-white/10 text-white outline-none focus:border-amber-400"
+                  />
+                  <datalist id="pos-menu-categories">
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-400 block mb-1">Menu Rate (₹)</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    step="0.01"
+                    value={dishFormData.price}
+                    onChange={(e) => setDishFormData({ ...dishFormData, price: e.target.value })}
+                    placeholder="120"
+                    className="w-full text-sm bg-stone-900 px-3.5 py-2.5 rounded-xl border border-white/10 text-white font-mono outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              {/* Veg / Non-Veg & Stock Status */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setDishFormData({ ...dishFormData, isVeg: !dishFormData.isVeg })}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-2 cursor-pointer ${
+                    dishFormData.isVeg
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                  }`}
+                >
+                  <span className={`w-2.5 h-2.5 rounded-full ${dishFormData.isVeg ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                  <span>{dishFormData.isVeg ? 'Vegetarian' : 'Non-Veg'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDishFormData({ ...dishFormData, available: !dishFormData.available })}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-2 cursor-pointer ${
+                    dishFormData.available
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-stone-800 text-stone-400 border-white/10'
+                  }`}
+                >
+                  {dishFormData.available ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  <span>{dishFormData.available ? 'In Stock' : 'Out of Stock'}</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDishModalOpen(false)}
+                  className="py-2.5 bg-stone-800 hover:bg-stone-700 text-white font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="py-2.5 bg-gradient-to-r from-amber-500 to-amber-400 hover:brightness-110 text-stone-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer"
+                >
+                  {editingDish ? 'Save Changes' : 'Add to Menu'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

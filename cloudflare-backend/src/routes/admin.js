@@ -1151,6 +1151,8 @@ admin.get('/analytics/dish-performance', async (c) => {
          mi.price,
          mi.photo_url,
          mi.available,
+         mi.is_veg,
+         mi.description,
          COALESCE(SUM(CASE WHEN ${todayOrderFilter} THEN oi.quantity ELSE 0 END), 0) AS quantity_sold_today,
          COALESCE(SUM(CASE WHEN ${todayOrderFilter} THEN oi.quantity * oi.price_at_order ELSE 0 END), 0) AS revenue_today,
          COALESCE(SUM(CASE WHEN o.id IS NOT NULL AND o.status != 'CANCELLED' AND oi.status != 'CANCELLED' THEN oi.quantity ELSE 0 END), 0) AS all_time_quantity_sold
@@ -1158,7 +1160,7 @@ admin.get('/analytics/dish-performance', async (c) => {
        LEFT JOIN order_items oi ON oi.menu_item_id = mi.id
        LEFT JOIN orders o ON oi.order_id = o.id
        WHERE mi.restaurant_id = ?
-       GROUP BY mi.id, mi.name, mi.category, mi.price, mi.photo_url, mi.available
+       GROUP BY mi.id, mi.name, mi.category, mi.price, mi.photo_url, mi.available, mi.is_veg, mi.description
        ORDER BY quantity_sold_today DESC, revenue_today DESC, all_time_quantity_sold DESC, mi.name ASC`
     ).bind(restaurantId).all();
 
@@ -1169,6 +1171,8 @@ admin.get('/analytics/dish-performance', async (c) => {
       price: Number(d.price || 0),
       photoUrl: d.photo_url,
       available: Boolean(d.available),
+      isVeg: Boolean(d.is_veg),
+      description: d.description || '',
       quantitySoldToday: Number(d.quantity_sold_today || 0),
       revenueToday: Math.round(Number(d.revenue_today || 0) * 100) / 100,
       allTimeQuantitySold: Number(d.all_time_quantity_sold || 0),
@@ -1213,6 +1217,7 @@ admin.get('/analytics/dish-performance', async (c) => {
       highestSoldDish,
       lowestSoldDish,
       topPerformers: (soldTodayList.length > 0 ? soldTodayList : dishes).slice(0, 5),
+      allDishes: dishes,
       notOrderedToday,
       leastSoldToday,
       underperformers,
