@@ -2386,12 +2386,18 @@ export default function WaiterPosPage() {
                     const targetSeatObj = targetSeatToSettle !== null
                       ? settleModalOrder.seatsBreakdown?.find((s) => s.seatNumber === targetSeatToSettle)
                       : null;
-                    const payableAmount = targetSeatObj ? targetSeatObj.subtotal : settleModalOrder.total;
+                    const unpaidTableTotal = (settleModalOrder.seatsBreakdown || []).reduce(
+                      (sum, s) => sum + (s.unpaidSubtotal ?? (s.isPaid ? 0 : s.subtotal)),
+                      0
+                    );
+                    const payableAmount = targetSeatObj
+                      ? (targetSeatObj.unpaidSubtotal > 0 ? targetSeatObj.unpaidSubtotal : targetSeatObj.subtotal)
+                      : (unpaidTableTotal > 0 ? unpaidTableTotal : settleModalOrder.total);
 
                     return (
                       <div className="flex justify-between items-baseline font-mono pt-2 border-t border-white/10">
                         <span className="text-xs uppercase tracking-wider text-stone-400 font-sans font-bold">
-                          {targetSeatObj ? `${targetSeatObj.label} Payable:` : 'Table Grand Total:'}
+                          {targetSeatObj ? `${targetSeatObj.label} Payable:` : 'Remaining Payable:'}
                         </span>
                         <span className="text-3xl font-black text-emerald-400">₹{payableAmount.toFixed(2)}</span>
                       </div>
@@ -2435,7 +2441,13 @@ export default function WaiterPosPage() {
                     const targetSeatObj = targetSeatToSettle !== null
                       ? settleModalOrder.seatsBreakdown?.find((s) => s.seatNumber === targetSeatToSettle)
                       : null;
-                    const payableAmount = targetSeatObj ? targetSeatObj.subtotal : settleModalOrder.total;
+                    const unpaidTableTotal = (settleModalOrder.seatsBreakdown || []).reduce(
+                      (sum, s) => sum + (s.unpaidSubtotal ?? (s.isPaid ? 0 : s.subtotal)),
+                      0
+                    );
+                    const payableAmount = targetSeatObj
+                      ? (targetSeatObj.unpaidSubtotal > 0 ? targetSeatObj.unpaidSubtotal : targetSeatObj.subtotal)
+                      : (unpaidTableTotal > 0 ? unpaidTableTotal : settleModalOrder.total);
 
                     return (
                       <div className="grid grid-cols-2 gap-2 pt-1">

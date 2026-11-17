@@ -7,6 +7,18 @@ function generateUUID() {
   return crypto.randomUUID();
 }
 
+// Helper: Guarantee a collision-free unique bill number in bills_archive
+async function ensureUniqueBillNumber(db, baseNumber) {
+  const existing = await db.prepare('SELECT id FROM bills_archive WHERE bill_number = ?').bind(baseNumber).first();
+  if (!existing) return baseNumber;
+  for (let round = 2; round <= 50; round++) {
+    const candidate = `${baseNumber}-R${round}`;
+    const check = await db.prepare('SELECT id FROM bills_archive WHERE bill_number = ?').bind(candidate).first();
+    if (!check) return candidate;
+  }
+  return `${baseNumber}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+}
+
 function toUtcIso(dateStr) {
   if (!dateStr) return new Date().toISOString();
   if (dateStr.includes('T')) return dateStr.endsWith('Z') ? dateStr : `${dateStr}Z`;
@@ -441,6 +453,8 @@ pos.post('/order/:id/settle', async (c) => {
     const billBaseNumber = `KB-${istNow.dateStr.replace(/-/g, '').slice(2)}-${shortCode}`;
     const tableLabel = Number(ord.table_number) === 0 ? 'PARCEL / TAKEAWAY' : `Table #${ord.table_number}`;
 
+    const fullOrderTotal = Math.round(allItems.reduce((sum, it) => sum + it.amount, 0) * 100) / 100;
+
     // ─────────────────────────────────────────────────────────────
     // CASE A: SETTLE INDIVIDUAL CUSTOMER SEAT (Customer 1, 2, 3, 4, 0)
     // ─────────────────────────────────────────────────────────────
@@ -451,10 +465,55 @@ pos.post('/order/:id/settle', async (c) => {
       }
 
       const unpaidSeatItems = seatItems.filter((it) => !it.isPaid);
-      const itemsToSettle = unpaidSeatItems.length > 0 ? unpaidSeatItems : seatItems;
-      const seatSubtotal = itemsToSettle.reduce((sum, it) => sum + it.amount, 0);
-      const indBillNumber = `${billBaseNumber}-${targetSeat === 0 ? 'SHR' : 'C' + targetSeat}`;
       const seatLabel = seatItems[0].seatLabel;
+
+      // If this customer seat is already 100% paid, return their existing bill cleanly without duplicate insert
+      if (unpaidSeatItems.length === 0) {
+        const existingBillNum = seatItems[0].individualBillNumber || `${billBaseNumber}-${targetSeat === 0 ? 'SHR' : 'C' + targetSeat}`;
+        const existingArchive = await c.env.DB.prepare(
+          'SELECT * FROM bills_archive WHERE bill_number = ? ORDER BY paid_at DESC LIMIT 1'
+        ).bind(existingBillNum).first();
+
+        const seatSubtotal = seatItems.reduce((sum, it) => sum + it.amount, 0);
+        const seatBreakdownObj = {
+          seat: targetSeat,
+          seatLabel,
+          individualBillNumber: existingBillNum,
+          items: seatItems,
+          subtotal: seatSubtotal,
+          taxAmount: 0,
+          total: seatSubtotal
+        };
+
+        return c.json({
+          success: true,
+          alreadyPaid: true,
+          isIndividualSeat: true,
+          settledSeat: targetSeat,
+          seatLabel,
+          billId: existingArchive?.id || generateUUID(),
+          billNumber: existingBillNum,
+          orderId,
+          tableNumber: Number(ord.table_number),
+          tableLabel: `${tableLabel} (${seatLabel})`,
+          serverName: ord.server_name || 'Captain',
+          guestCount: 1,
+          paymentMethod: seatItems[0].paymentMethod || paymentMethod,
+          subtotal: seatSubtotal,
+          taxAmount: 0,
+          total: seatSubtotal,
+          items: seatItems,
+          customerBreakdown: [seatBreakdownObj],
+          paidAt: existingArchive?.paid_at || istNow.full
+        });
+      }
+
+      const itemsToSettle = unpaidSeatItems;
+      const seatSubtotal = Math.round(itemsToSettle.reduce((sum, it) => sum + it.amount, 0) * 100) / 100;
+      const indBillNumber = await ensureUniqueBillNumber(
+        c.env.DB,
+        `${billBaseNumber}-${targetSeat === 0 ? 'SHR' : 'C' + targetSeat}`
+      );
       const billArchiveId = generateUUID();
 
       // Individual thermal slip text
@@ -542,12 +601,12 @@ pos.post('/order/:id/settle', async (c) => {
 
       if (tableFullySettled) {
         await c.env.DB.prepare(
-          "UPDATE orders SET status = 'PAID', payment_method = ?, subtotal = 0, total = 0, updated_at = datetime('now') WHERE id = ?"
-        ).bind(paymentMethod, orderId).run();
+          "UPDATE orders SET status = 'PAID', payment_method = ?, subtotal = ?, total = ?, updated_at = datetime('now') WHERE id = ?"
+        ).bind(paymentMethod, fullOrderTotal, fullOrderTotal, orderId).run();
       } else {
         await c.env.DB.prepare(
           "UPDATE orders SET subtotal = ?, total = ?, updated_at = datetime('now') WHERE id = ?"
-        ).bind(remainingTotal, remainingTotal, orderId).run();
+        ).bind(fullOrderTotal, fullOrderTotal, orderId).run();
       }
 
       return c.json({
@@ -582,10 +641,10 @@ pos.post('/order/:id/settle', async (c) => {
     // ─────────────────────────────────────────────────────────────
     const unpaidItems = allItems.filter((it) => !it.isPaid);
     const itemsToSettle = unpaidItems.length > 0 ? unpaidItems : allItems;
-    const subtotal = itemsToSettle.reduce((sum, it) => sum + it.amount, 0);
+    const subtotal = Math.round(itemsToSettle.reduce((sum, it) => sum + it.amount, 0) * 100) / 100;
     const taxAmount = 0; // 0% GST
     const total = subtotal;
-    const billNumber = billBaseNumber;
+    const billNumber = await ensureUniqueBillNumber(c.env.DB, billBaseNumber);
     const billArchiveId = generateUUID();
 
     // Build customer 1 to 4 seat breakdown
@@ -671,11 +730,11 @@ pos.post('/order/:id/settle', async (c) => {
       ord.created_at
     ).run();
 
-    // Mark order and all items as PAID
+    // Mark order and all items as PAID (preserving full order revenue for analytics)
     await Promise.all([
       c.env.DB.prepare(
-        "UPDATE orders SET status = 'PAID', payment_method = ?, subtotal = 0, total = 0, updated_at = datetime('now') WHERE id = ?"
-      ).bind(paymentMethod, orderId).run(),
+        "UPDATE orders SET status = 'PAID', payment_method = ?, subtotal = ?, total = ?, updated_at = datetime('now') WHERE id = ?"
+      ).bind(paymentMethod, fullOrderTotal, fullOrderTotal, orderId).run(),
       c.env.DB.prepare(
         "UPDATE order_items SET is_paid = 1, paid_at = datetime('now'), payment_method = ? WHERE order_id = ? AND (is_paid = 0 OR is_paid IS NULL)"
       ).bind(paymentMethod, orderId).run()
