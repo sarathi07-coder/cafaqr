@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UtensilsCrossed,
@@ -33,10 +33,23 @@ import {
   Edit3,
   Trash2,
   Eye,
-  EyeOff
+  EyeOff,
+  LayoutGrid,
+  ShieldCheck,
+  ArrowLeftRight
 } from 'lucide-react';
 import { api } from '../api';
 import KrishLogo from '../components/KrishLogo';
+import {
+  getSyncToken,
+  hydratePersistentAuth,
+  removePersistentToken,
+  setPersistentToken,
+} from '../utils/persistentAuth';
+
+const KitchenPage = lazy(() => import('./KitchenPage'));
+const AdminDashboardPage = lazy(() => import('./AdminDashboardPage'));
+const AdminLoginPage = lazy(() => import('./AdminLoginPage'));
 
 const RESTAURANT_ID = 'db4ed920-3d20-420a-9f54-99d3c0b48a08';
 
@@ -362,11 +375,49 @@ function MultiCustomerReceiptSlip({ data, viewMode, setViewMode, isPreBill = fal
   );
 }
 
-export default function WaiterPosPage() {
+export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = null }) {
   const navigate = useNavigate();
 
-  // Mode: 'TABLES' | 'ORDERING' | 'BILLING' | 'HISTORY'
-  const [activeTab, setActiveTab] = useState('TABLES');
+  const isOrderOnly = appSection === 'ORDER_ONLY';
+  const isBillingSuite = appSection === 'BILLING_SUITE';
+
+  // Mode: 'TABLES' | 'ORDERING' | 'BILLING' | 'HISTORY' | 'PERFORMANCE' | 'KITCHEN' | 'ADMIN'
+  const [activeTab, setActiveTab] = useState(() => (appSection === 'BILLING_SUITE' ? 'BILLING' : 'TABLES'));
+
+  // Embedded Admin Auth State (for Billing & Management Section)
+  const [adminToken, setAdminToken] = useState(() => getSyncToken('qr_admin_token'));
+
+  useEffect(() => {
+    if (appSection === 'ORDER_ONLY' && activeTab !== 'TABLES' && activeTab !== 'ORDERING') {
+      setActiveTab('TABLES');
+    } else if (appSection === 'BILLING_SUITE' && (activeTab === 'TABLES' || activeTab === 'ORDERING')) {
+      setActiveTab('BILLING');
+    }
+  }, [appSection]);
+
+  useEffect(() => {
+    let cancelled = false;
+    hydratePersistentAuth().then(async ({ adminToken: restoredAdmin, kitchenToken: restoredKitchen }) => {
+      if (cancelled) return;
+      if (restoredAdmin) {
+        setAdminToken(restoredAdmin);
+        if (!restoredKitchen) {
+          try {
+            const v = await api.verifyAdminSession(restoredAdmin);
+            if (!cancelled && v?.valid && v?.kitchenToken) {
+              await setPersistentToken('qr_kitchen_token', v.kitchenToken);
+            }
+          } catch {}
+        }
+      }
+    });
+    const syncToken = () => setAdminToken(getSyncToken('qr_admin_token'));
+    window.addEventListener('storage', syncToken);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('storage', syncToken);
+    };
+  }, []);
 
   // Server selection
   const [serverName, setServerName] = useState(() => localStorage.getItem('krish_server_name') || 'Captain');
@@ -835,133 +886,179 @@ export default function WaiterPosPage() {
         </div>
       )}
 
-      {/* Top POS Header Navigation */}
-      <header className="sticky top-0 z-40 bg-[#161310]/95 backdrop-blur-md border-b border-white/10 px-4 py-3 shadow-md">
+      {/* Top POS Header Navigation (Safe-Area Mobile App Aware) */}
+      <header className="sticky top-0 z-40 bg-[#161310]/95 backdrop-blur-md border-b border-white/10 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-md print:hidden">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           
-          {/* Brand & Server Tag */}
-          <div className="flex items-center justify-between w-full sm:w-auto gap-4">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('TABLES')}>
-              <KrishLogo className="w-9 h-9" />
+          {/* Brand, Section Switcher & Server Tag */}
+          <div className="flex items-center justify-between w-full sm:w-auto gap-3">
+            <div
+              className="flex items-center gap-3 cursor-pointer"
+              onClick={() => setActiveTab(isBillingSuite ? 'BILLING' : 'TABLES')}
+            >
+              <KrishLogo className="w-9 h-9 shrink-0" />
               <div>
-                <h1 className="font-serif font-black text-base text-amber-400 tracking-wide uppercase leading-tight">
-                  KRISH POS
+                <h1 className="font-serif font-black text-base text-amber-400 tracking-wide uppercase leading-tight flex items-center gap-2">
+                  <span>{isOrderOnly ? 'KRISH ORDER TAKING' : isBillingSuite ? 'KRISH BILLING & OPS' : 'KRISH POS'}</span>
                 </h1>
                 <p className="text-[10px] text-stone-400 tracking-wider uppercase font-semibold">
-                  Staff Waiter &amp; Billing Terminal
+                  {isOrderOnly
+                    ? 'Waiter Floor & Customer 1–4 Ordering'
+                    : isBillingSuite
+                    ? 'Cashier Billing • History • Food • Kitchen • Admin'
+                    : 'Staff Waiter & Billing Terminal'}
                 </p>
               </div>
             </div>
 
-            {/* Server Badge */}
             <div className="flex items-center gap-2">
-              {isEditingServer ? (
-                <form onSubmit={handleSaveServerName} className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={tempServerName}
-                    onChange={(e) => setTempServerName(e.target.value)}
-                    className="text-xs px-2.5 py-1 bg-stone-900 border border-amber-400 rounded-lg text-white font-bold w-28 outline-none"
-                    autoFocus
-                  />
-                  <button type="submit" className="text-xs bg-amber-500 text-black px-2 py-1 rounded-lg font-bold">
-                    Save
+              {/* Server Badge (Shown in Order Taking & All modes) */}
+              {!isBillingSuite && (
+                isEditingServer ? (
+                  <form onSubmit={handleSaveServerName} className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={tempServerName}
+                      onChange={(e) => setTempServerName(e.target.value)}
+                      className="text-xs px-2.5 py-1 bg-stone-900 border border-amber-400 rounded-lg text-white font-bold w-24 sm:w-28 outline-none"
+                      autoFocus
+                    />
+                    <button type="submit" className="text-xs bg-amber-500 text-black px-2 py-1 rounded-lg font-bold">
+                      Save
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setTempServerName(serverName); setIsEditingServer(true); }}
+                    className="px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1.5 hover:bg-amber-500/20 transition cursor-pointer"
+                    title="Click to change server name"
+                  >
+                    <UserCheck className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="max-w-20 sm:max-w-none truncate">{serverName}</span>
                   </button>
-                </form>
-              ) : (
+                )
+              )}
+
+              {/* Switch App Section Button (Returns to 2-Section Launcher) */}
+              {onSwitchSection && (
                 <button
                   type="button"
-                  onClick={() => { setTempServerName(serverName); setIsEditingServer(true); }}
-                  className="px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1.5 hover:bg-amber-500/20 transition cursor-pointer"
-                  title="Click to change server name"
+                  onClick={onSwitchSection}
+                  className="px-2.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 border border-white/15 text-stone-200 hover:text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                  title="Switch between Order Taking & Billing sections"
                 >
-                  <UserCheck className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Server: {serverName}</span>
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden xs:inline">Switch Mode</span>
                 </button>
               )}
             </div>
           </div>
 
-          {/* Navigation Mode Tabs */}
+          {/* Navigation Mode Tabs (Filtered cleanly per App Section) */}
           <div className="flex items-center gap-1.5 bg-stone-900/90 p-1 rounded-2xl border border-white/10 text-xs font-bold w-full sm:w-auto overflow-x-auto no-scrollbar">
-            <button
-              type="button"
-              onClick={() => setActiveTab('TABLES')}
-              className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                activeTab === 'TABLES' || activeTab === 'ORDERING'
-                  ? 'bg-amber-500 text-stone-950 font-black shadow-sm'
-                  : 'text-stone-400 hover:text-white'
-              }`}
-            >
-              <UtensilsCrossed className="w-3.5 h-3.5" />
-              <span>Floor Tables</span>
-            </button>
+            {/* ORDER TAKING SECTION TABS */}
+            {!isBillingSuite && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('TABLES')}
+                className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                  activeTab === 'TABLES' || activeTab === 'ORDERING'
+                    ? 'bg-amber-500 text-stone-950 font-black shadow-sm'
+                    : 'text-stone-400 hover:text-white'
+                }`}
+              >
+                <UtensilsCrossed className="w-3.5 h-3.5" />
+                <span>Floor Tables ({tablesData.occupiedCount} Active)</span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('BILLING')}
-              className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                activeTab === 'BILLING'
-                  ? 'bg-amber-500 text-stone-950 font-black shadow-sm'
-                  : 'text-stone-400 hover:text-white'
-              }`}
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Billing Counter</span>
-              {tablesData.occupiedCount > 0 && (
-                <span className="w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center font-mono">
-                  {tablesData.occupiedCount}
-                </span>
-              )}
-            </button>
+            {/* BILLING & REMAINING SECTION TABS */}
+            {!isOrderOnly && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('BILLING')}
+                  className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    activeTab === 'BILLING'
+                      ? 'bg-amber-500 text-stone-950 font-black shadow-sm'
+                      : 'text-stone-400 hover:text-white'
+                  }`}
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Billing Counter</span>
+                  {tablesData.occupiedCount > 0 && (
+                    <span className="w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center font-mono">
+                      {tablesData.occupiedCount}
+                    </span>
+                  )}
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('HISTORY')}
-              className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                activeTab === 'HISTORY'
-                  ? 'bg-amber-500 text-stone-950 font-black shadow-sm'
-                  : 'text-stone-400 hover:text-white'
-              }`}
-            >
-              <History className="w-3.5 h-3.5" />
-              <span>Bills &amp; History</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('HISTORY')}
+                  className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    activeTab === 'HISTORY'
+                      ? 'bg-amber-500 text-stone-950 font-black shadow-sm'
+                      : 'text-stone-400 hover:text-white'
+                  }`}
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>Bills &amp; History</span>
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('PERFORMANCE')}
-              className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                activeTab === 'PERFORMANCE'
-                  ? 'bg-amber-500 text-stone-950 font-black shadow-sm'
-                  : 'text-stone-400 hover:text-white'
-              }`}
-            >
-              <ChefHat className="w-3.5 h-3.5" />
-              <span>Food Manager &amp; Sales</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('PERFORMANCE')}
+                  className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    activeTab === 'PERFORMANCE'
+                      ? 'bg-amber-500 text-stone-950 font-black shadow-sm'
+                      : 'text-stone-400 hover:text-white'
+                  }`}
+                >
+                  <ChefHat className="w-3.5 h-3.5" />
+                  <span>Food Manager</span>
+                </button>
 
-            {/* Back to Kitchen / Admin */}
-            <button
-              type="button"
-              onClick={() => navigate('/kitchen')}
-              className="px-3 py-1.5 rounded-xl text-stone-400 hover:text-white transition text-xs whitespace-nowrap"
-            >
-              Kitchen ↗
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/admin')}
-              className="px-3 py-1.5 rounded-xl text-stone-400 hover:text-white transition text-xs whitespace-nowrap"
-            >
-              Admin ↗
-            </button>
+                <button
+                  type="button"
+                  onClick={() => (isBillingSuite ? setActiveTab('KITCHEN') : navigate('/kitchen'))}
+                  className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    activeTab === 'KITCHEN'
+                      ? 'bg-emerald-400 text-stone-950 font-black shadow-sm'
+                      : 'text-stone-400 hover:text-white'
+                  }`}
+                >
+                  <Flame className="w-3.5 h-3.5" />
+                  <span>Kitchen</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => (isBillingSuite ? setActiveTab('ADMIN') : navigate('/admin'))}
+                  className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    activeTab === 'ADMIN'
+                      ? 'bg-amber-400 text-stone-950 font-black shadow-sm'
+                      : 'text-stone-400 hover:text-white'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Admin</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+      <main
+        className={
+          activeTab === 'KITCHEN' || activeTab === 'ADMIN'
+            ? 'flex-1 w-full pb-24 sm:pb-6'
+            : 'flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 pb-24 sm:pb-8'
+        }
+      >
         
         {/* ============================================================== */}
         {/* TAB 1: INTERACTIVE FLOOR TABLE MAP (Stage 6) */}
@@ -1101,7 +1198,7 @@ export default function WaiterPosPage() {
                         <span>{isOccupied ? 'Add Dishes' : 'Take Order'}</span>
                       </button>
 
-                      {isOccupied && (
+                      {isOccupied && !isOrderOnly && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1156,17 +1253,19 @@ export default function WaiterPosPage() {
               {activeTableOrder && (
                 <div className="flex items-center gap-3 bg-stone-900/80 px-4 py-2 rounded-2xl border border-blue-500/30">
                   <div>
-                    <span className="text-[10px] text-stone-400 uppercase tracking-wider block font-bold">Current Bill Total</span>
+                    <span className="text-[10px] text-stone-400 uppercase tracking-wider block font-bold">Running Table Total</span>
                     <span className="text-base font-black text-emerald-400 font-mono">₹{activeTableOrder.total.toFixed(2)}</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenSettleModal(selectedTable)}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>Print Bill</span>
-                  </button>
+                  {!isOrderOnly && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSettleModal(selectedTable)}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Print Bill</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -2290,7 +2389,149 @@ export default function WaiterPosPage() {
             )}
           </div>
         )}
+
+        {/* ============================================================== */}
+        {/* TAB 6: EMBEDDED KITCHEN DISPLAY (Inside Billing & Ops Section) */}
+        {/* ============================================================== */}
+        {activeTab === 'KITCHEN' && (
+          <Suspense
+            fallback={
+              <div className="py-20 text-center text-stone-400">
+                <RefreshCw className="w-8 h-8 animate-spin mx-auto text-emerald-400 mb-2" />
+                <p className="text-xs">Loading Kitchen Display...</p>
+              </div>
+            }
+          >
+            <KitchenPage embedded={true} />
+          </Suspense>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 7: EMBEDDED ADMIN DASHBOARD (Inside Billing & Ops Section) */}
+        {/* ============================================================== */}
+        {activeTab === 'ADMIN' && (
+          <Suspense
+            fallback={
+              <div className="py-20 text-center text-stone-400">
+                <RefreshCw className="w-8 h-8 animate-spin mx-auto text-amber-400 mb-2" />
+                <p className="text-xs">Loading Admin Dashboard...</p>
+              </div>
+            }
+          >
+            {adminToken ? (
+              <AdminDashboardPage
+                embedded={true}
+                onLogout={() => {
+                  removePersistentToken('qr_admin_token');
+                  setAdminToken('');
+                }}
+              />
+            ) : (
+              <AdminLoginPage
+                embedded={true}
+                onLoginSuccess={(tok) => setAdminToken(tok || getSyncToken('qr_admin_token'))}
+              />
+            )}
+          </Suspense>
+        )}
       </main>
+
+      {/* ============================================================== */}
+      {/* NATIVE MOBILE APP FIXED BOTTOM NAVIGATION BAR (Android & iOS) */}
+      {/* ============================================================== */}
+      {isBillingSuite && (
+        <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-[#120F0C]/95 backdrop-blur-xl border-t border-white/15 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_25px_rgba(0,0,0,0.7)] print:hidden">
+          <div className="grid grid-cols-5 gap-1 px-2 py-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('BILLING')}
+              className={`py-1.5 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition cursor-pointer relative ${
+                activeTab === 'BILLING' ? 'bg-amber-500 text-stone-950 font-black' : 'text-stone-400'
+              }`}
+            >
+              <Printer className="w-4 h-4" />
+              <span>Billing</span>
+              {tablesData.occupiedCount > 0 && activeTab !== 'BILLING' && (
+                <span className="absolute top-0.5 right-2 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] flex items-center justify-center font-mono">
+                  {tablesData.occupiedCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('HISTORY')}
+              className={`py-1.5 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition cursor-pointer ${
+                activeTab === 'HISTORY' ? 'bg-amber-500 text-stone-950 font-black' : 'text-stone-400'
+              }`}
+            >
+              <History className="w-4 h-4" />
+              <span>History</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('PERFORMANCE')}
+              className={`py-1.5 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition cursor-pointer ${
+                activeTab === 'PERFORMANCE' ? 'bg-amber-500 text-stone-950 font-black' : 'text-stone-400'
+              }`}
+            >
+              <ChefHat className="w-4 h-4" />
+              <span>Food</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('KITCHEN')}
+              className={`py-1.5 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition cursor-pointer ${
+                activeTab === 'KITCHEN' ? 'bg-emerald-400 text-stone-950 font-black' : 'text-stone-400'
+              }`}
+            >
+              <Flame className="w-4 h-4" />
+              <span>Kitchen</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('ADMIN')}
+              className={`py-1.5 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition cursor-pointer ${
+                activeTab === 'ADMIN' ? 'bg-amber-400 text-stone-950 font-black' : 'text-stone-400'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Admin</span>
+            </button>
+          </div>
+        </nav>
+      )}
+
+      {isOrderOnly && onSwitchSection && (
+        <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-[#120F0C]/95 backdrop-blur-xl border-t border-white/15 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_25px_rgba(0,0,0,0.7)] print:hidden">
+          <div className="grid grid-cols-2 gap-2 px-4 py-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('TABLES')}
+              className={`py-2 rounded-xl flex items-center justify-center gap-1.5 text-xs font-black transition cursor-pointer ${
+                activeTab === 'TABLES' || activeTab === 'ORDERING'
+                  ? 'bg-amber-500 text-stone-950'
+                  : 'bg-stone-900 text-stone-300'
+              }`}
+            >
+              <UtensilsCrossed className="w-4 h-4" />
+              <span>Floor Tables ({tablesData.occupiedCount})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onSwitchSection}
+              className="py-2 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold bg-stone-900 text-stone-200 border border-white/10 cursor-pointer"
+            >
+              <ArrowLeftRight className="w-4 h-4 text-amber-400" />
+              <span>Switch Section</span>
+            </button>
+          </div>
+        </nav>
+      )}
 
       {/* ============================================================== */}
       {/* MODAL 1: SETTLE BILL & MULTI-CUSTOMER THERMAL PRINT MODAL */}
