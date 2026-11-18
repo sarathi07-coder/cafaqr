@@ -791,7 +791,11 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
       };
 
       const res = await api.createPosOrder(payload);
-      showToast(`✅ ${selectedTable.tableLabel} order dispatched to kitchen & billing! Total: ₹${res.total}`);
+      showToast(
+        isOrderOnly
+          ? `✅ ${selectedTable.tableLabel} order sent to kitchen!`
+          : `✅ ${selectedTable.tableLabel} order dispatched to kitchen & billing! Total: ₹${res.total}`
+      );
       setCartItems([]);
       setOrderNotes('');
       await loadTableStatus();
@@ -1159,8 +1163,16 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                       {isOccupied && t.activeOrder ? (
                         <div className="space-y-2 font-mono text-xs">
                           <div className="flex items-baseline justify-between text-white font-black text-lg">
-                            <span>₹{t.activeOrder.total.toFixed(2)}</span>
-                            <span className="text-[11px] font-sans font-bold text-stone-400">{t.activeOrder.itemCount} items</span>
+                            {isOrderOnly ? (
+                              <span className="font-sans text-base font-black text-amber-300">
+                                {t.activeOrder.itemCount} Dishes
+                              </span>
+                            ) : (
+                              <>
+                                <span>₹{t.activeOrder.total.toFixed(2)}</span>
+                                <span className="text-[11px] font-sans font-bold text-stone-400">{t.activeOrder.itemCount} items</span>
+                              </>
+                            )}
                           </div>
                           <div className="text-[11px] text-stone-400 flex items-center justify-between font-sans">
                             <span>By: {t.activeOrder.serverName}</span>
@@ -1173,21 +1185,30 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                           {/* Customer 1 to 4 Seat Chips */}
                           {t.activeOrder.seatsBreakdown && t.activeOrder.seatsBreakdown.length > 0 && (
                             <div className="flex flex-wrap gap-1 pt-1.5 border-t border-white/5 font-sans">
-                              {t.activeOrder.seatsBreakdown.map((s) => (
-                                <span
-                                  key={s.seatNumber}
-                                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 ${
-                                    s.isPaid
-                                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                      : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                                  }`}
-                                  title={`${s.label}: ₹${s.subtotal} (${s.isPaid ? 'PAID' : 'UNPAID'})`}
-                                >
-                                  <span>{s.seatNumber === 0 ? '👥' : `C${s.seatNumber}`}:</span>
-                                  <span className="font-mono">₹{s.subtotal}</span>
-                                  {s.isPaid && <span>✓</span>}
-                                </span>
-                              ))}
+                              {t.activeOrder.seatsBreakdown.map((s) => {
+                                const seatQty = (s.items || []).reduce((sum, it) => sum + Number(it.quantity || 1), 0);
+                                return (
+                                  <span
+                                    key={s.seatNumber}
+                                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 ${
+                                      !isOrderOnly && s.isPaid
+                                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                        : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                    }`}
+                                    title={isOrderOnly ? `${s.label}: ${seatQty} dishes` : `${s.label}: ₹${s.subtotal} (${s.isPaid ? 'PAID' : 'UNPAID'})`}
+                                  >
+                                    <span>{s.seatNumber === 0 ? '👥' : `C${s.seatNumber}`}:</span>
+                                    {isOrderOnly ? (
+                                      <span className="font-mono">{seatQty}</span>
+                                    ) : (
+                                      <>
+                                        <span className="font-mono">₹{s.subtotal}</span>
+                                        {s.isPaid && <span>✓</span>}
+                                      </>
+                                    )}
+                                  </span>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -1268,31 +1289,59 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                   </div>
                 </div>
 
-                {/* Compact Running Total Badge on Mobile */}
+                {/* Compact Running Order Count (Order Only) or Total (All Mode) on Mobile */}
                 {activeTableOrder && (
                   <div className="sm:hidden text-right font-mono shrink-0 bg-stone-900 px-2.5 py-1 rounded-xl border border-blue-500/30">
-                    <span className="text-[9px] text-stone-400 uppercase block font-sans font-bold leading-none">Running</span>
-                    <span className="text-xs font-black text-emerald-400">₹{activeTableOrder.total.toFixed(0)}</span>
+                    {isOrderOnly ? (
+                      <>
+                        <span className="text-[9px] text-stone-400 uppercase block font-sans font-bold leading-none">Ordered</span>
+                        <span className="text-xs font-black text-amber-400 font-sans">
+                          {(activeTableOrder.seatsBreakdown || []).reduce(
+                            (sum, s) => sum + (s.items || []).reduce((acc, it) => acc + Number(it.quantity || 1), 0),
+                            0
+                          )}{' '}
+                          dishes
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-[9px] text-stone-400 uppercase block font-sans font-bold leading-none">Running</span>
+                        <span className="text-xs font-black text-emerald-400">₹{activeTableOrder.total.toFixed(0)}</span>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Active Tab Subtotal / Settle Shortcut (Tablet & Desktop) */}
+              {/* Active Tab Summary (Tablet & Desktop) */}
               {activeTableOrder && (
                 <div className="hidden sm:flex items-center gap-3 bg-stone-900/80 px-4 py-2 rounded-2xl border border-blue-500/30">
-                  <div>
-                    <span className="text-[10px] text-stone-400 uppercase tracking-wider block font-bold">Running Table Total</span>
-                    <span className="text-base font-black text-emerald-400 font-mono">₹{activeTableOrder.total.toFixed(2)}</span>
-                  </div>
-                  {!isOrderOnly && (
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSettleModal(selectedTable)}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                      <span>Print Bill</span>
-                    </button>
+                  {isOrderOnly ? (
+                    <div>
+                      <span className="text-[10px] text-stone-400 uppercase tracking-wider block font-bold">Table Active Orders</span>
+                      <span className="text-base font-black text-amber-400 font-sans">
+                        {(activeTableOrder.seatsBreakdown || []).reduce(
+                          (sum, s) => sum + (s.items || []).reduce((acc, it) => acc + Number(it.quantity || 1), 0),
+                          0
+                        )}{' '}
+                        Dishes Sent
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <span className="text-[10px] text-stone-400 uppercase tracking-wider block font-bold">Running Table Total</span>
+                        <span className="text-base font-black text-emerald-400 font-mono">₹{activeTableOrder.total.toFixed(2)}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSettleModal(selectedTable)}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Print Bill</span>
+                      </button>
+                    </>
                   )}
                 </div>
               )}
@@ -1306,7 +1355,7 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                   <span>Select Customer (1 to 4)</span>
                 </span>
                 <span className="hidden sm:inline text-[11px] text-stone-400">
-                  Tap a customer card to assign dishes directly to their separate bill
+                  Tap a customer card to view their ordered dishes and add more
                 </span>
               </div>
 
@@ -1357,7 +1406,7 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                             <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black bg-amber-500 text-stone-950 uppercase tracking-wide whitespace-nowrap shrink-0">
                               ACTIVE
                             </span>
-                          ) : isPaid ? (
+                          ) : !isOrderOnly && isPaid ? (
                             <span className="px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-emerald-500/20 text-emerald-300 whitespace-nowrap shrink-0">
                               PAID
                             </span>
@@ -1372,34 +1421,45 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                           )}
                         </div>
 
-                        {/* Subtotal & Items Preview */}
+                        {/* Dish Count (Order Taking) or Subtotal (Full Mode) */}
                         <div className="mt-1.5 sm:mt-2.5 space-y-0.5 sm:space-y-1">
-                          <div className="flex justify-between items-baseline gap-1 font-mono">
-                            <span className="text-[10px] sm:text-[11px] font-sans text-stone-400 font-bold whitespace-nowrap">
-                              <span className="sm:hidden">Bill</span>
-                              <span className="hidden sm:inline">Individual Bill:</span>
-                            </span>
-                            <span className={`text-sm sm:text-base font-black whitespace-nowrap ${isSelected ? 'text-amber-400' : 'text-stone-200'}`}>
-                              ₹{totalSeatAmount.toFixed(0)}
-                            </span>
-                          </div>
+                          {isOrderOnly ? (
+                            <div className="flex justify-between items-baseline gap-1">
+                              <span className="text-[10px] sm:text-[11px] font-sans text-stone-400 font-bold whitespace-nowrap">
+                                Orders
+                              </span>
+                              <span className={`text-xs sm:text-sm font-black whitespace-nowrap ${isSelected ? 'text-amber-400' : 'text-stone-200'}`}>
+                                {totalSeatItems} {totalSeatItems === 1 ? 'dish' : 'dishes'}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex justify-between items-baseline gap-1 font-mono">
+                              <span className="text-[10px] sm:text-[11px] font-sans text-stone-400 font-bold whitespace-nowrap">
+                                <span className="sm:hidden">Bill</span>
+                                <span className="hidden sm:inline">Individual Bill:</span>
+                              </span>
+                              <span className={`text-sm sm:text-base font-black whitespace-nowrap ${isSelected ? 'text-amber-400' : 'text-stone-200'}`}>
+                                ₹{totalSeatAmount.toFixed(0)}
+                              </span>
+                            </div>
+                          )}
 
                           <div className="text-[10px] sm:text-[11px] text-stone-400 space-y-0.5 font-sans">
                             {cartCount > 0 && (
                               <div className="text-amber-300 font-bold flex items-center justify-between gap-1">
-                                <span className="truncate">+{cartCount} in cart</span>
-                                <span className="font-mono shrink-0">+₹{cartSubtotal}</span>
+                                <span className="truncate">+{cartCount} new in cart</span>
+                                {!isOrderOnly && <span className="font-mono shrink-0">+₹{cartSubtotal}</span>}
                               </div>
                             )}
                             {existingCount > 0 && (
                               <div className="text-stone-400 flex items-center justify-between gap-1">
-                                <span className="truncate">{existingCount} ordered</span>
-                                <span className="font-mono shrink-0">₹{existingSubtotal}</span>
+                                <span className="truncate">{existingCount} sent to kitchen</span>
+                                {!isOrderOnly && <span className="font-mono shrink-0">₹{existingSubtotal}</span>}
                               </div>
                             )}
                             {totalSeatItems === 0 && (
                               <p className="text-stone-500 text-[10px] sm:text-[11px] italic truncate">
-                                Tap to add for C{seatNum}
+                                Tap to view / add
                               </p>
                             )}
                           </div>
@@ -1409,7 +1469,7 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                       {/* Action Tap indicator (Desktop/Tablet only to save vertical space on phone) */}
                       <div className="hidden sm:flex mt-3 pt-2 border-t border-white/5 items-center justify-between text-[11px]">
                         <span className={`font-bold ${isSelected ? 'text-amber-400' : 'text-stone-400'}`}>
-                          {isSelected ? '✓ Adding to this bill' : 'Tap to select'}
+                          {isSelected ? '✓ Viewing & Adding Orders' : 'Tap to view orders'}
                         </span>
                         <Users className="w-3.5 h-3.5 text-stone-500" />
                       </div>
@@ -1417,6 +1477,97 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                   );
                 })}
               </div>
+
+              {/* SELECTED CUSTOMER CLEAR ORDER LIST PANEL (Shows exact ordered dishes clearly — NO payment info!) */}
+              {(() => {
+                const activeSeatLabel = selectedSeat === 0 ? 'Table Shared' : `Customer ${selectedSeat}`;
+                const activeSeatCode = selectedSeat === 0 ? '👥' : `C${selectedSeat}`;
+                const sentSeatData = activeTableOrder?.seatsBreakdown?.find((s) => s.seatNumber === selectedSeat);
+                const sentItems = sentSeatData?.items || [];
+                const pendingCartItems = cartItems.filter((it) => it.customerSeat === selectedSeat);
+                const totalItemsCount =
+                  sentItems.reduce((sum, it) => sum + Number(it.quantity || 1), 0) +
+                  pendingCartItems.reduce((sum, it) => sum + Number(it.quantity || 1), 0);
+
+                return (
+                  <div className="bg-[#171411] rounded-2xl border border-amber-500/40 p-3 sm:p-4 shadow-lg space-y-2.5">
+                    {/* Panel Header */}
+                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/10">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center font-black text-xs shrink-0">
+                          {activeSeatCode}
+                        </div>
+                        <h3 className="font-bold text-white text-sm sm:text-base truncate">
+                          {activeSeatLabel} &bull; Ordered Dishes
+                        </h3>
+                      </div>
+
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 whitespace-nowrap shrink-0">
+                        {totalItemsCount} {totalItemsCount === 1 ? 'dish' : 'dishes'}
+                      </span>
+                    </div>
+
+                    {/* Clear Itemized Order Rows (No Payment / No Settle Buttons) */}
+                    {totalItemsCount === 0 ? (
+                      <p className="text-xs text-stone-400 py-1.5 text-center italic">
+                        No dishes ordered yet for <strong className="text-amber-300">{activeSeatLabel}</strong> — tap dishes in the menu below to add.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                        {/* Already Sent to Kitchen Items */}
+                        {sentItems.map((it, idx) => (
+                          <div
+                            key={`sent-${it.id || idx}`}
+                            className="flex items-center justify-between gap-2 bg-stone-900/90 border border-white/5 px-3 py-2 rounded-xl text-xs sm:text-sm"
+                          >
+                            <span className="font-semibold text-stone-100 truncate">
+                              <span className="text-amber-400 font-black font-mono mr-1.5">{it.quantity}x</span>
+                              {it.name}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/30 text-[10px] font-bold uppercase tracking-wider shrink-0">
+                              Sent
+                            </span>
+                          </div>
+                        ))}
+
+                        {/* Newly Added Cart Items (Editable +/- right here!) */}
+                        {pendingCartItems.map((it, idx) => (
+                          <div
+                            key={`cart-${it.menuItemId}-${idx}`}
+                            className="flex items-center justify-between gap-2 bg-amber-500/10 border border-amber-500/35 px-3 py-1.5 rounded-xl text-xs sm:text-sm"
+                          >
+                            <span className="font-bold text-white truncate">
+                              <span className="text-amber-400 font-black font-mono mr-1.5">{it.quantity}x</span>
+                              {it.name}
+                              <span className="ml-1.5 text-[10px] font-bold text-amber-300 uppercase">(New)</span>
+                            </span>
+
+                            <div className="flex items-center gap-1.5 shrink-0 font-mono">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItemFromSeat(it.menuItemId, selectedSeat)}
+                                className="w-6 h-6 rounded-lg bg-stone-800 hover:bg-rose-600 text-white flex items-center justify-center cursor-pointer"
+                                title="Decrease quantity"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="text-xs font-black text-amber-300 w-4 text-center">{it.quantity}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleAddItemToSeat({ id: it.menuItemId, name: it.name, price: it.price, category: it.category, is_veg: it.isVeg }, selectedSeat)}
+                                className="w-6 h-6 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 flex items-center justify-center cursor-pointer"
+                                title="Increase quantity"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Table Shared Option Bar (Compact 1-row on mobile) */}
               <div className="flex items-center justify-between gap-2 bg-stone-900/60 px-2.5 py-2 rounded-2xl border border-white/10">
@@ -1590,30 +1741,52 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                   {/* Seat Breakdown Chips (Single horizontal scrollable line on mobile) */}
                   <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
                     <span className="text-[10px] sm:text-xs font-bold text-stone-400 uppercase tracking-wider shrink-0">
-                      Cart ({cartTotals.totalCount}):
+                      New ({cartTotals.totalCount}):
                     </span>
-                    {cartTotals.seats.map((s) => (
-                      <div
-                        key={s.seat}
-                        className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl bg-stone-900 border border-white/10 text-[11px] sm:text-xs font-bold flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0"
-                      >
-                        <span className="text-amber-400">{s.seat === 0 ? 'Shared' : `C${s.seat}`}:</span>
-                        <span className="text-white font-mono">{s.items.reduce((acc, it) => acc + it.quantity, 0)}</span>
-                        <span className="text-stone-500">&bull;</span>
-                        <span className="text-emerald-400 font-mono">₹{s.subtotal}</span>
-                      </div>
-                    ))}
+                    {cartTotals.seats.map((s) => {
+                      const seatItemCount = s.items.reduce((acc, it) => acc + it.quantity, 0);
+                      return (
+                        <div
+                          key={s.seat}
+                          className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl bg-stone-900 border border-white/10 text-[11px] sm:text-xs font-bold flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0"
+                        >
+                          <span className="text-amber-400">{s.seat === 0 ? 'Shared' : `C${s.seat}`}:</span>
+                          <span className="text-white font-mono">
+                            {seatItemCount} {seatItemCount === 1 ? 'dish' : 'dishes'}
+                          </span>
+                          {!isOrderOnly && (
+                            <>
+                              <span className="text-stone-500">&bull;</span>
+                              <span className="text-emerald-400 font-mono">₹{s.subtotal}</span>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
 
-                  {/* Total & Action Button */}
+                  {/* Summary & Action Button */}
                   <div className="flex items-center justify-between md:justify-end gap-3 sm:gap-4 w-full md:w-auto">
                     <div className="min-w-0">
-                      <span className="text-[9px] sm:text-[10px] text-stone-400 uppercase tracking-wider block font-bold leading-none">
-                        Order Total
-                      </span>
-                      <span className="text-xl sm:text-2xl font-black text-amber-400 font-mono leading-tight">
-                        ₹{cartTotals.subtotal.toFixed(0)}
-                      </span>
+                      {isOrderOnly ? (
+                        <>
+                          <span className="text-[9px] sm:text-[10px] text-stone-400 uppercase tracking-wider block font-bold leading-none">
+                            Ready to Send
+                          </span>
+                          <span className="text-lg sm:text-xl font-black text-amber-400 font-sans leading-tight">
+                            {cartTotals.totalCount} {cartTotals.totalCount === 1 ? 'Dish' : 'Dishes'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-[9px] sm:text-[10px] text-stone-400 uppercase tracking-wider block font-bold leading-none">
+                            Order Total
+                          </span>
+                          <span className="text-xl sm:text-2xl font-black text-amber-400 font-mono leading-tight">
+                            ₹{cartTotals.subtotal.toFixed(0)}
+                          </span>
+                        </>
+                      )}
                     </div>
 
                     <button
@@ -1624,7 +1797,9 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                     >
                       <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                       <span className="sm:hidden">{isSubmittingOrder ? 'Sending...' : 'Send Order'}</span>
-                      <span className="hidden sm:inline">{isSubmittingOrder ? 'Sending...' : 'Send to Kitchen & Billing'}</span>
+                      <span className="hidden sm:inline">
+                        {isSubmittingOrder ? 'Sending...' : isOrderOnly ? 'Send Order to Kitchen' : 'Send to Kitchen & Billing'}
+                      </span>
                     </button>
                   </div>
                 </div>
