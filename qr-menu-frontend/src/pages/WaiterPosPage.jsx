@@ -887,21 +887,33 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
       )}
 
       {/* Top POS Header Navigation (Safe-Area Mobile App Aware) */}
-      <header className="sticky top-0 z-40 bg-[#161310]/95 backdrop-blur-md border-b border-white/10 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-md print:hidden">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+      <header className="sticky top-0 z-40 bg-[#161310]/95 backdrop-blur-md border-b border-white/10 px-3 sm:px-4 py-2 sm:py-3 pt-[max(0.5rem,env(safe-area-inset-top))] shadow-md print:hidden">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-3">
           
           {/* Brand, Section Switcher & Server Tag */}
-          <div className="flex items-center justify-between w-full sm:w-auto gap-3">
+          <div className="flex items-center justify-between w-full sm:w-auto gap-2 sm:gap-3">
             <div
-              className="flex items-center gap-3 cursor-pointer"
+              className="flex items-center gap-2.5 cursor-pointer min-w-0"
               onClick={() => setActiveTab(isBillingSuite ? 'BILLING' : 'TABLES')}
             >
-              <KrishLogo className="w-9 h-9 shrink-0" />
-              <div>
-                <h1 className="font-serif font-black text-base text-amber-400 tracking-wide uppercase leading-tight flex items-center gap-2">
-                  <span>{isOrderOnly ? 'KRISH ORDER TAKING' : isBillingSuite ? 'KRISH BILLING & OPS' : 'KRISH POS'}</span>
+              <KrishLogo className="w-8 h-8 sm:w-9 sm:h-9 shrink-0" />
+              <div className="min-w-0">
+                <h1 className="font-serif font-black text-sm sm:text-base text-amber-400 tracking-wide uppercase leading-tight truncate">
+                  {isOrderOnly ? (
+                    <>
+                      <span className="sm:hidden">KRISH ORDER</span>
+                      <span className="hidden sm:inline">KRISH ORDER TAKING</span>
+                    </>
+                  ) : isBillingSuite ? (
+                    <>
+                      <span className="sm:hidden">KRISH BILLING</span>
+                      <span className="hidden sm:inline">KRISH BILLING &amp; OPS</span>
+                    </>
+                  ) : (
+                    'KRISH POS'
+                  )}
                 </h1>
-                <p className="text-[10px] text-stone-400 tracking-wider uppercase font-semibold">
+                <p className="hidden sm:block text-[10px] text-stone-400 tracking-wider uppercase font-semibold truncate">
                   {isOrderOnly
                     ? 'Waiter Floor & Customer 1–4 Ordering'
                     : isBillingSuite
@@ -911,16 +923,16 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* Server Badge (Shown in Order Taking & All modes) */}
               {!isBillingSuite && (
                 isEditingServer ? (
-                  <form onSubmit={handleSaveServerName} className="flex items-center gap-1.5">
+                  <form onSubmit={handleSaveServerName} className="flex items-center gap-1">
                     <input
                       type="text"
                       value={tempServerName}
                       onChange={(e) => setTempServerName(e.target.value)}
-                      className="text-xs px-2.5 py-1 bg-stone-900 border border-amber-400 rounded-lg text-white font-bold w-24 sm:w-28 outline-none"
+                      className="text-xs px-2 py-1 bg-stone-900 border border-amber-400 rounded-lg text-white font-bold w-24 outline-none"
                       autoFocus
                     />
                     <button type="submit" className="text-xs bg-amber-500 text-black px-2 py-1 rounded-lg font-bold">
@@ -931,11 +943,11 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                   <button
                     type="button"
                     onClick={() => { setTempServerName(serverName); setIsEditingServer(true); }}
-                    className="px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1.5 hover:bg-amber-500/20 transition cursor-pointer"
+                    className="px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] sm:text-xs font-bold flex items-center gap-1 hover:bg-amber-500/20 transition cursor-pointer"
                     title="Click to change server name"
                   >
-                    <UserCheck className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="max-w-20 sm:max-w-none truncate">{serverName}</span>
+                    <UserCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span className="max-w-18 sm:max-w-none truncate">{serverName}</span>
                   </button>
                 )
               )}
@@ -949,14 +961,18 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                   title="Switch between Order Taking & Billing sections"
                 >
                   <ArrowLeftRight className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden xs:inline">Switch Mode</span>
+                  <span className="hidden sm:inline">Switch Mode</span>
                 </button>
               )}
             </div>
           </div>
 
-          {/* Navigation Mode Tabs (Filtered cleanly per App Section) */}
-          <div className="flex items-center gap-1.5 bg-stone-900/90 p-1 rounded-2xl border border-white/10 text-xs font-bold w-full sm:w-auto overflow-x-auto no-scrollbar">
+          {/* Navigation Mode Tabs (Hidden on mobile when Bottom Navigation Bar is active) */}
+          <div
+            className={`${
+              isOrderOnly || isBillingSuite ? 'hidden sm:flex' : 'flex'
+            } items-center gap-1.5 bg-stone-900/90 p-1 rounded-2xl border border-white/10 text-xs font-bold w-full sm:w-auto overflow-x-auto no-scrollbar`}
+          >
             {/* ORDER TAKING SECTION TABS */}
             {!isBillingSuite && (
               <button
@@ -1056,7 +1072,9 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
         className={
           activeTab === 'KITCHEN' || activeTab === 'ADMIN'
             ? 'flex-1 w-full pb-24 sm:pb-6'
-            : 'flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 pb-24 sm:pb-8'
+            : activeTab === 'ORDERING' && cartItems.length > 0
+            ? 'flex-1 max-w-7xl w-full mx-auto px-3 py-3 sm:p-6 pb-48 sm:pb-10'
+            : 'flex-1 max-w-7xl w-full mx-auto px-3 py-3 sm:p-6 pb-24 sm:pb-8'
         }
       >
         
@@ -1223,35 +1241,45 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
         {/* TAB 2: WAITER MULTI-SEAT ORDERING TERMINAL (Stage 7) */}
         {/* ============================================================== */}
         {activeTab === 'ORDERING' && selectedTable && (
-          <div className="space-y-5 animate-fade-in">
+          <div className="space-y-3 sm:space-y-5 animate-fade-in">
             
-            {/* Top Bar for Selected Table */}
-            <div className="bg-[#171411] p-4 rounded-3xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('TABLES')}
-                  className="p-2.5 rounded-2xl bg-stone-800 hover:bg-stone-700 text-white transition cursor-pointer flex items-center gap-1 text-xs font-bold"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span>Floor</span>
-                </button>
-                <div>
-                  <h2 className="text-xl font-serif font-black text-amber-400 flex items-center gap-2">
-                    <span>{selectedTable.tableLabel}</span>
-                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-stone-800 text-stone-300 font-sans font-bold">
-                      Server: {serverName}
-                    </span>
-                  </h2>
-                  <p className="text-xs text-stone-400">
-                    Select a customer seat below, then tap dishes to add them directly to that customer's tab.
-                  </p>
+            {/* Top Bar for Selected Table (Compact 1-row on mobile) */}
+            <div className="bg-[#171411] p-2.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 shadow-lg">
+              <div className="flex items-center justify-between sm:justify-start gap-2.5 sm:gap-3 w-full md:w-auto">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('TABLES')}
+                    className="px-2.5 py-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-stone-800 hover:bg-stone-700 text-white transition cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span>Floor</span>
+                  </button>
+                  <div className="min-w-0">
+                    <h2 className="text-base sm:text-xl font-serif font-black text-amber-400 flex items-center gap-2 truncate">
+                      <span>{selectedTable.tableLabel}</span>
+                      <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-stone-800 text-stone-300 font-sans font-bold whitespace-nowrap">
+                        {serverName}
+                      </span>
+                    </h2>
+                    <p className="hidden sm:block text-xs text-stone-400">
+                      Select a customer seat below, then tap dishes to add them directly to that customer&apos;s tab.
+                    </p>
+                  </div>
                 </div>
+
+                {/* Compact Running Total Badge on Mobile */}
+                {activeTableOrder && (
+                  <div className="sm:hidden text-right font-mono shrink-0 bg-stone-900 px-2.5 py-1 rounded-xl border border-blue-500/30">
+                    <span className="text-[9px] text-stone-400 uppercase block font-sans font-bold leading-none">Running</span>
+                    <span className="text-xs font-black text-emerald-400">₹{activeTableOrder.total.toFixed(0)}</span>
+                  </div>
+                )}
               </div>
 
-              {/* Active Tab Subtotal / Settle Shortcut */}
+              {/* Active Tab Subtotal / Settle Shortcut (Tablet & Desktop) */}
               {activeTableOrder && (
-                <div className="flex items-center gap-3 bg-stone-900/80 px-4 py-2 rounded-2xl border border-blue-500/30">
+                <div className="hidden sm:flex items-center gap-3 bg-stone-900/80 px-4 py-2 rounded-2xl border border-blue-500/30">
                   <div>
                     <span className="text-[10px] text-stone-400 uppercase tracking-wider block font-bold">Running Table Total</span>
                     <span className="text-base font-black text-emerald-400 font-mono">₹{activeTableOrder.total.toFixed(2)}</span>
@@ -1270,19 +1298,19 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
               )}
             </div>
 
-            {/* 4 INDIVIDUAL CUSTOMER ORDERING PANELS (Diners 1 to 4) */}
-            <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                  <Users className="w-4 h-4" />
-                  <span>Individual Customer Ordering Sections (Diners 1 to 4)</span>
+            {/* 4 INDIVIDUAL CUSTOMER ORDERING PANELS (Diners 1 to 4 — Zero-Wrap Mobile Cards) */}
+            <div className="space-y-2 sm:space-y-3">
+              <div className="flex items-center justify-between gap-2 px-0.5">
+                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                  <span>Select Customer (1 to 4)</span>
                 </span>
-                <span className="text-[11px] text-stone-400">
+                <span className="hidden sm:inline text-[11px] text-stone-400">
                   Tap a customer card to assign dishes directly to their separate bill
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                 {[1, 2, 3, 4].map((seatNum) => {
                   const isSelected = selectedSeat === seatNum;
 
@@ -1304,72 +1332,82 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                     <div
                       key={seatNum}
                       onClick={() => setSelectedSeat(seatNum)}
-                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden ${
+                      className={`p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden ${
                         isSelected
-                          ? 'bg-[#221C16] border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.25)] ring-2 ring-amber-400/50'
+                          ? 'bg-[#221C16] border-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.22)] ring-1 sm:ring-2 ring-amber-400/50'
                           : 'bg-stone-900/80 hover:bg-stone-900 border-white/10 hover:border-white/20'
                       }`}
                     >
-                      {/* Card Top */}
+                      {/* Card Top — Guaranteed Single Line on iPhone & Android */}
                       <div>
-                        <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
+                        <div className="flex items-center justify-between gap-1 pb-1.5 sm:pb-2 border-b border-white/10">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center font-bold text-[11px] sm:text-xs shrink-0 ${
                               isSelected ? 'bg-amber-500 text-stone-950 font-black' : 'bg-stone-800 text-stone-400'
                             }`}>
                               C{seatNum}
                             </div>
-                            <span className="font-bold text-white text-sm">Customer {seatNum}</span>
+                            <span className="font-bold text-white text-xs sm:text-sm whitespace-nowrap truncate">
+                              <span className="sm:hidden">Cust {seatNum}</span>
+                              <span className="hidden sm:inline">Customer {seatNum}</span>
+                            </span>
                           </div>
 
                           {isSelected ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-stone-950 uppercase tracking-wider animate-pulse">
-                              ● ACTIVE
+                            <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black bg-amber-500 text-stone-950 uppercase tracking-wide whitespace-nowrap shrink-0">
+                              ACTIVE
                             </span>
                           ) : isPaid ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300">
+                            <span className="px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-emerald-500/20 text-emerald-300 whitespace-nowrap shrink-0">
                               PAID
                             </span>
                           ) : totalSeatItems > 0 ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-stone-800 text-amber-300">
-                              {totalSeatItems} items
+                            <span className="px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-stone-800 text-amber-300 whitespace-nowrap shrink-0">
+                              {totalSeatItems}
                             </span>
                           ) : (
-                            <span className="text-[10px] text-stone-500 font-semibold">Empty</span>
+                            <span className="text-[9px] sm:text-[10px] text-stone-500 font-semibold whitespace-nowrap shrink-0">
+                              Empty
+                            </span>
                           )}
                         </div>
 
                         {/* Subtotal & Items Preview */}
-                        <div className="mt-2.5 space-y-1">
-                          <div className="flex justify-between items-baseline font-mono">
-                            <span className="text-[11px] font-sans text-stone-400 font-bold">Individual Bill:</span>
-                            <span className={`text-base font-black ${isSelected ? 'text-amber-400' : 'text-stone-200'}`}>
-                              ₹{totalSeatAmount.toFixed(2)}
+                        <div className="mt-1.5 sm:mt-2.5 space-y-0.5 sm:space-y-1">
+                          <div className="flex justify-between items-baseline gap-1 font-mono">
+                            <span className="text-[10px] sm:text-[11px] font-sans text-stone-400 font-bold whitespace-nowrap">
+                              <span className="sm:hidden">Bill</span>
+                              <span className="hidden sm:inline">Individual Bill:</span>
+                            </span>
+                            <span className={`text-sm sm:text-base font-black whitespace-nowrap ${isSelected ? 'text-amber-400' : 'text-stone-200'}`}>
+                              ₹{totalSeatAmount.toFixed(0)}
                             </span>
                           </div>
 
-                          <div className="text-[11px] text-stone-400 space-y-0.5 font-sans">
+                          <div className="text-[10px] sm:text-[11px] text-stone-400 space-y-0.5 font-sans">
                             {cartCount > 0 && (
-                              <div className="text-amber-300 font-bold flex items-center justify-between">
-                                <span>+ {cartCount} dish in cart</span>
-                                <span className="font-mono">+₹{cartSubtotal}</span>
+                              <div className="text-amber-300 font-bold flex items-center justify-between gap-1">
+                                <span className="truncate">+{cartCount} in cart</span>
+                                <span className="font-mono shrink-0">+₹{cartSubtotal}</span>
                               </div>
                             )}
                             {existingCount > 0 && (
-                              <div className="text-stone-400 flex items-center justify-between">
-                                <span>{existingCount} ordered earlier</span>
-                                <span className="font-mono">₹{existingSubtotal}</span>
+                              <div className="text-stone-400 flex items-center justify-between gap-1">
+                                <span className="truncate">{existingCount} ordered</span>
+                                <span className="font-mono shrink-0">₹{existingSubtotal}</span>
                               </div>
                             )}
                             {totalSeatItems === 0 && (
-                              <p className="text-stone-500 text-[11px] italic">Tap dishes to add to C{seatNum}</p>
+                              <p className="text-stone-500 text-[10px] sm:text-[11px] italic truncate">
+                                Tap to add for C{seatNum}
+                              </p>
                             )}
                           </div>
                         </div>
                       </div>
 
-                      {/* Action Tap indicator */}
-                      <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
+                      {/* Action Tap indicator (Desktop/Tablet only to save vertical space on phone) */}
+                      <div className="hidden sm:flex mt-3 pt-2 border-t border-white/5 items-center justify-between text-[11px]">
                         <span className={`font-bold ${isSelected ? 'text-amber-400' : 'text-stone-400'}`}>
                           {isSelected ? '✓ Adding to this bill' : 'Tap to select'}
                         </span>
@@ -1380,19 +1418,20 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                 })}
               </div>
 
-              {/* Table Shared Option Bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-stone-900/60 p-2.5 rounded-2xl border border-white/10">
+              {/* Table Shared Option Bar (Compact 1-row on mobile) */}
+              <div className="flex items-center justify-between gap-2 bg-stone-900/60 px-2.5 py-2 rounded-2xl border border-white/10">
                 <button
                   type="button"
                   onClick={() => setSelectedSeat(0)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer w-fit ${
+                  className={`px-2.5 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                     selectedSeat === 0
                       ? 'bg-amber-500 text-stone-950 font-black shadow-md'
                       : 'bg-stone-800 text-stone-400 hover:text-white border border-white/10'
                   }`}
                 >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>👥 Order Shared / Table Items (Starters, Water, Bread)</span>
+                  <Users className="w-3.5 h-3.5 shrink-0" />
+                  <span className="sm:hidden">👥 Shared Items</span>
+                  <span className="hidden sm:inline">👥 Order Shared / Table Items (Starters, Water, Bread)</span>
                   {cartItems.filter((it) => it.customerSeat === 0).length > 0 && (
                     <span className="px-1.5 py-0.2 bg-stone-950 text-amber-400 rounded-full font-mono text-[10px]">
                       {cartItems.filter((it) => it.customerSeat === 0).reduce((sum, it) => sum + it.quantity, 0)}
@@ -1400,10 +1439,11 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                   )}
                 </button>
 
-                <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5 px-1">
-                  <span>Currently Ordering For:</span>
+                <div className="text-[11px] sm:text-xs font-bold text-amber-300 flex items-center gap-1 whitespace-nowrap shrink-0">
+                  <span className="hidden sm:inline">Currently Ordering For:</span>
+                  <span className="sm:hidden text-stone-400">For:</span>
                   <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/40">
-                    {selectedSeat === 0 ? 'Table Shared' : `Customer ${selectedSeat}`}
+                    {selectedSeat === 0 ? 'Shared' : `Customer ${selectedSeat}`}
                   </span>
                 </div>
               </div>
@@ -1536,23 +1576,29 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
               </div>
             </div>
 
-            {/* Sticky Bottom Order Bar & Seat Cart */}
+            {/* Sticky / Floating Bottom Order Bar & Seat Cart (Safe-Area Aware Above Mobile Bottom Nav) */}
             {cartItems.length > 0 && (
-              <div className="sticky bottom-4 z-40 bg-[#1A1612]/95 backdrop-blur-md rounded-3xl border border-amber-500/40 p-4 shadow-[0_8px_30px_rgba(0,0,0,0.8)] space-y-3">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div
+                className={`${
+                  isOrderOnly && onSwitchSection
+                    ? 'fixed inset-x-3 bottom-[calc(4.15rem+env(safe-area-inset-bottom))] sm:sticky sm:inset-x-auto sm:bottom-4'
+                    : 'sticky bottom-[max(1rem,env(safe-area-inset-bottom))]'
+                } z-40 bg-[#1A1612]/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl border border-amber-500/50 p-2.5 sm:p-4 shadow-[0_8px_30px_rgba(0,0,0,0.85)] space-y-2 sm:space-y-3`}
+              >
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-3">
                   
-                  {/* Seat Breakdown Chips */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-bold text-stone-400 uppercase tracking-wider mr-1">
-                      Tab Cart ({cartTotals.totalCount} items):
+                  {/* Seat Breakdown Chips (Single horizontal scrollable line on mobile) */}
+                  <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
+                    <span className="text-[10px] sm:text-xs font-bold text-stone-400 uppercase tracking-wider shrink-0">
+                      Cart ({cartTotals.totalCount}):
                     </span>
                     {cartTotals.seats.map((s) => (
                       <div
                         key={s.seat}
-                        className="px-3 py-1 rounded-xl bg-stone-900 border border-white/10 text-xs font-bold flex items-center gap-1.5"
+                        className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl bg-stone-900 border border-white/10 text-[11px] sm:text-xs font-bold flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0"
                       >
-                        <span className="text-amber-400">{s.label}:</span>
-                        <span className="text-white font-mono">{s.items.reduce((acc, it) => acc + it.quantity, 0)} items</span>
+                        <span className="text-amber-400">{s.seat === 0 ? 'Shared' : `C${s.seat}`}:</span>
+                        <span className="text-white font-mono">{s.items.reduce((acc, it) => acc + it.quantity, 0)}</span>
                         <span className="text-stone-500">&bull;</span>
                         <span className="text-emerald-400 font-mono">₹{s.subtotal}</span>
                       </div>
@@ -1560,20 +1606,25 @@ export default function WaiterPosPage({ appSection = 'ALL', onSwitchSection = nu
                   </div>
 
                   {/* Total & Action Button */}
-                  <div className="flex items-center justify-between md:justify-end gap-4 w-full md:w-auto">
-                    <div>
-                      <span className="text-[10px] text-stone-400 uppercase tracking-wider block font-bold">New Additions Total</span>
-                      <span className="text-2xl font-black text-amber-400 font-mono">₹{cartTotals.subtotal.toFixed(2)}</span>
+                  <div className="flex items-center justify-between md:justify-end gap-3 sm:gap-4 w-full md:w-auto">
+                    <div className="min-w-0">
+                      <span className="text-[9px] sm:text-[10px] text-stone-400 uppercase tracking-wider block font-bold leading-none">
+                        Order Total
+                      </span>
+                      <span className="text-xl sm:text-2xl font-black text-amber-400 font-mono leading-tight">
+                        ₹{cartTotals.subtotal.toFixed(0)}
+                      </span>
                     </div>
 
                     <button
                       type="button"
                       disabled={isSubmittingOrder}
                       onClick={handleDispatchOrder}
-                      className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-400 hover:brightness-110 active:scale-98 text-stone-950 font-black text-sm uppercase tracking-wider rounded-2xl shadow-[0_4px_20px_rgba(245,158,11,0.4)] flex items-center gap-2 cursor-pointer transition disabled:opacity-50"
+                      className="px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-amber-500 to-amber-400 hover:brightness-110 active:scale-98 text-stone-950 font-black text-xs sm:text-sm uppercase tracking-wider rounded-xl sm:rounded-2xl shadow-[0_4px_20px_rgba(245,158,11,0.4)] flex items-center gap-1.5 sm:gap-2 cursor-pointer transition disabled:opacity-50 whitespace-nowrap shrink-0"
                     >
-                      <Send className="w-4 h-4" />
-                      <span>{isSubmittingOrder ? 'Sending...' : 'Send to Kitchen & Billing'}</span>
+                      <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                      <span className="sm:hidden">{isSubmittingOrder ? 'Sending...' : 'Send Order'}</span>
+                      <span className="hidden sm:inline">{isSubmittingOrder ? 'Sending...' : 'Send to Kitchen & Billing'}</span>
                     </button>
                   </div>
                 </div>
