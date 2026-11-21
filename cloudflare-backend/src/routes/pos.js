@@ -16,7 +16,7 @@ async function ensureUniqueBillNumber(db, baseNumber) {
     const check = await db.prepare('SELECT id FROM bills_archive WHERE bill_number = ?').bind(candidate).first();
     if (!check) return candidate;
   }
-  return `${baseNumber}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  return `${baseNumber}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
 
 function toUtcIso(dateStr) {
@@ -514,7 +514,7 @@ pos.post('/order/:id/settle', async (c) => {
         c.env.DB,
         `${billBaseNumber}-${targetSeat === 0 ? 'SHR' : 'C' + targetSeat}`
       );
-      const billArchiveId = generateUUID();
+      let billArchiveId = generateUUID();
 
       // Individual thermal slip text
       const indLines = [
@@ -559,34 +559,48 @@ pos.post('/order/:id/settle', async (c) => {
         thermalText
       };
 
-      // Commit individual customer bill to permanent archive
-      await c.env.DB.prepare(
-        `INSERT INTO bills_archive (
-           id, bill_number, order_id, restaurant_id, table_number, table_label, server_name, guest_count,
-           subtotal, discount_amount, tax_amount, total, payment_method, customer_breakdown, items_json, created_at, paid_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 0, 0, ?, ?, ?, ?, ?, datetime('now'))`
-      ).bind(
-        billArchiveId,
-        indBillNumber,
-        orderId,
-        ord.restaurant_id,
-        Number(ord.table_number),
-        `${tableLabel} (${seatLabel})`,
-        ord.server_name || 'Captain',
-        seatSubtotal,
-        seatSubtotal,
-        paymentMethod,
-        JSON.stringify([seatBreakdownObj]),
-        JSON.stringify(itemsToSettle),
-        ord.created_at
-      ).run();
+      // Commit individual customer bill to permanent archive (guaranteed collision-free with auto-retry)
+      let finalIndBillNumber = indBillNumber;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          await c.env.DB.prepare(
+            `INSERT INTO bills_archive (
+               id, bill_number, order_id, restaurant_id, table_number, table_label, server_name, guest_count,
+               subtotal, discount_amount, tax_amount, total, payment_method, customer_breakdown, items_json, created_at, paid_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 0, 0, ?, ?, ?, ?, ?, datetime('now'))`
+          ).bind(
+            billArchiveId,
+            finalIndBillNumber,
+            orderId,
+            ord.restaurant_id,
+            Number(ord.table_number),
+            `${tableLabel} (${seatLabel})`,
+            ord.server_name || 'Captain',
+            seatSubtotal,
+            seatSubtotal,
+            paymentMethod,
+            JSON.stringify([seatBreakdownObj]),
+            JSON.stringify(itemsToSettle),
+            ord.created_at
+          ).run();
+          break;
+        } catch (insertErr) {
+          if (insertErr.message && (insertErr.message.includes('UNIQUE constraint failed') || insertErr.message.includes('SQLITE_CONSTRAINT_UNIQUE'))) {
+            finalIndBillNumber = `${billBaseNumber}-${targetSeat === 0 ? 'SHR' : 'C' + targetSeat}-R${attempt + 2}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+            billArchiveId = generateUUID();
+            seatBreakdownObj.individualBillNumber = finalIndBillNumber;
+          } else {
+            throw insertErr;
+          }
+        }
+      }
 
       // Mark this seat's items as paid
       await c.env.DB.prepare(
         `UPDATE order_items
          SET is_paid = 1, paid_at = datetime('now'), payment_method = ?, individual_bill_number = ?
          WHERE order_id = ? AND customer_seat = ? AND (is_paid = 0 OR is_paid IS NULL)`
-      ).bind(paymentMethod, indBillNumber, orderId, targetSeat).run();
+      ).bind(paymentMethod, finalIndBillNumber, orderId, targetSeat).run();
 
       // Check remaining unpaid items on table
       const remainingRes = await c.env.DB.prepare(
@@ -615,7 +629,7 @@ pos.post('/order/:id/settle', async (c) => {
         settledSeat: targetSeat,
         seatLabel,
         billId: billArchiveId,
-        billNumber: indBillNumber,
+        billNumber: finalIndBillNumber,
         orderId,
         tableNumber: Number(ord.table_number),
         tableLabel: `${tableLabel} (${seatLabel})`,
@@ -644,8 +658,8 @@ pos.post('/order/:id/settle', async (c) => {
     const subtotal = Math.round(itemsToSettle.reduce((sum, it) => sum + it.amount, 0) * 100) / 100;
     const taxAmount = 0; // 0% GST
     const total = subtotal;
-    const billNumber = await ensureUniqueBillNumber(c.env.DB, billBaseNumber);
-    const billArchiveId = generateUUID();
+    let billNumber = await ensureUniqueBillNumber(c.env.DB, billBaseNumber);
+    let billArchiveId = generateUUID();
 
     // Build customer 1 to 4 seat breakdown
     const customerBreakdownMap = {};
@@ -706,29 +720,45 @@ pos.post('/order/:id/settle', async (c) => {
       seatObj.thermalText = indLines.join('\n');
     }
 
-    // Commit to permanent bills_archive
-    await c.env.DB.prepare(
-      `INSERT INTO bills_archive (
-         id, bill_number, order_id, restaurant_id, table_number, table_label, server_name, guest_count,
-         subtotal, discount_amount, tax_amount, total, payment_method, customer_breakdown, items_json, created_at, paid_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, datetime('now'))`
-    ).bind(
-      billArchiveId,
-      billNumber,
-      orderId,
-      ord.restaurant_id,
-      Number(ord.table_number),
-      tableLabel,
-      ord.server_name || 'Captain',
-      Number(ord.guest_count || 1),
-      subtotal,
-      taxAmount,
-      total,
-      paymentMethod,
-      JSON.stringify(customerBreakdown),
-      JSON.stringify(itemsToSettle),
-      ord.created_at
-    ).run();
+    // Commit to permanent bills_archive (guaranteed collision-free with auto-retry)
+    let finalBillNumber = billNumber;
+    let finalBillArchiveId = billArchiveId;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await c.env.DB.prepare(
+          `INSERT INTO bills_archive (
+             id, bill_number, order_id, restaurant_id, table_number, table_label, server_name, guest_count,
+             subtotal, discount_amount, tax_amount, total, payment_method, customer_breakdown, items_json, created_at, paid_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, datetime('now'))`
+        ).bind(
+          finalBillArchiveId,
+          finalBillNumber,
+          orderId,
+          ord.restaurant_id,
+          Number(ord.table_number),
+          tableLabel,
+          ord.server_name || 'Captain',
+          Number(ord.guest_count || 1),
+          subtotal,
+          taxAmount,
+          total,
+          paymentMethod,
+          JSON.stringify(customerBreakdown),
+          JSON.stringify(itemsToSettle),
+          ord.created_at
+        ).run();
+        break;
+      } catch (insertErr) {
+        if (insertErr.message && (insertErr.message.includes('UNIQUE constraint failed') || insertErr.message.includes('SQLITE_CONSTRAINT_UNIQUE'))) {
+          finalBillNumber = `${billBaseNumber}-R${attempt + 2}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+          finalBillArchiveId = generateUUID();
+        } else {
+          throw insertErr;
+        }
+      }
+    }
+    billNumber = finalBillNumber;
+    billArchiveId = finalBillArchiveId;
 
     // Mark order and all items as PAID (preserving full order revenue for analytics)
     await Promise.all([
